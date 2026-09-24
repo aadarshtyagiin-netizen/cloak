@@ -27,7 +27,7 @@ export async function cleanup(app: FastifyInstance): Promise<void> {
   const { prisma } = await import('../lib/prisma.js');
   await prisma.$disconnect();
   const { redis } = await import('../lib/redis.js');
-  redis.disconnect();
+  redis?.disconnect();
 }
 
 let seq = 0;

@@ -23,7 +23,9 @@ const schema = z.object({
 
   // Infra
   DATABASE_URL: z.string().min(1),
-  REDIS_URL: z.string().default('redis://localhost:6379'),
+  // Optional: set to enable the Redis-backed Socket.IO adapter + presence store
+  // (needed only for multi-instance scaling). Empty = in-memory (single node).
+  REDIS_URL: z.string().default(''),
 
   // Tokens
   JWT_ACCESS_SECRET: z.string().min(8),

@@ -1,10 +1,10 @@
 import { redis } from '../../lib/redis.js';
 
 /**
- * Redis-backed presence with a short TTL. Heartbeats refresh the key; offline is
- * inferred from expiry, so we never write to Postgres on every heartbeat. All
- * calls are best-effort — if Redis is briefly unavailable, presence simply
- * degrades rather than crashing the socket layer.
+ * Presence with a short TTL. Backed by Redis when configured (so it's shared
+ * across instances); otherwise an in-memory store with the same TTL semantics
+ * (correct for a single instance). All calls are best-effort — presence never
+ * crashes the socket layer.
  */
 export const PRESENCE_TTL_SEC = 60;
 
@@ -12,7 +12,14 @@ export type PresenceValue = 'ONLINE' | 'AWAY' | 'DND' | 'OFFLINE' | 'INVISIBLE';
 
 const key = (profileId: string) => `presence:${profileId}`;
 
+// In-memory fallback used when Redis isn't configured (single-instance deploys).
+const mem = new Map<string, { status: PresenceValue; exp: number }>();
+
 export async function setPresence(profileId: string, status: PresenceValue): Promise<void> {
+  if (!redis) {
+    mem.set(profileId, { status, exp: Date.now() + PRESENCE_TTL_SEC * 1000 });
+    return;
+  }
   try {
     await redis.set(key(profileId), status, 'EX', PRESENCE_TTL_SEC);
   } catch {
@@ -21,6 +28,11 @@ export async function setPresence(profileId: string, status: PresenceValue): Pro
 }
 
 export async function refreshPresence(profileId: string): Promise<void> {
+  if (!redis) {
+    const e = mem.get(profileId);
+    if (e) e.exp = Date.now() + PRESENCE_TTL_SEC * 1000;
+    return;
+  }
   try {
     await redis.expire(key(profileId), PRESENCE_TTL_SEC);
   } catch {
@@ -29,6 +41,10 @@ export async function refreshPresence(profileId: string): Promise<void> {
 }
 
 export async function clearPresence(profileId: string): Promise<void> {
+  if (!redis) {
+    mem.delete(profileId);
+    return;
+  }
   try {
     await redis.del(key(profileId));
   } catch {
@@ -37,6 +53,11 @@ export async function clearPresence(profileId: string): Promise<void> {
 }
 
 export async function getPresence(profileId: string): Promise<PresenceValue> {
+  if (!redis) {
+    const e = mem.get(profileId);
+    if (!e || e.exp < Date.now()) return 'OFFLINE';
+    return e.status;
+  }
   try {
     return ((await redis.get(key(profileId))) as PresenceValue | null) ?? 'OFFLINE';
   } catch {

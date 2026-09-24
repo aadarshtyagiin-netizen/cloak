@@ -32,6 +32,8 @@ services:
       # ── Secrets: set these in the Render dashboard ──
       - key: DATABASE_URL # Supabase SESSION pooler string (port 5432, IPv4)
         sync: false
+      - key: REDIS_URL # Upstash rediss:// URL — enables shared presence + multi-instance realtime
+        sync: false
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
