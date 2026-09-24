@@ -79,10 +79,21 @@ delivery will be rejected.
 1. Push the repo to GitHub.
 2. Render dashboard → **New → Blueprint** → pick the repo. It reads `render.yaml`.
 3. Fill the `sync:false` secrets in the dashboard: `DATABASE_URL` (Supabase
-   session pooler), `WEB_ORIGIN`, `ADMIN_EMAILS`, `LIVEKIT_API_KEY/SECRET`,
-   `S3_*`, `SMTP_USER/PASS`, `EMAIL_FROM`. (`JWT_*` are auto-generated.)
+   session pooler), `REDIS_URL` (Upstash), `WEB_ORIGIN`, `ADMIN_EMAILS`,
+   `LIVEKIT_API_KEY/SECRET`, `S3_*`, `SMTP_USER/PASS`. (`JWT_*` are auto-generated.)
 4. Deploy. Build runs `db:generate` + build; start runs `db:deploy` then the
    server. Health check: `/health`. The server honors Render's injected `PORT`.
+
+If you create the service **manually** instead of via the Blueprint, set:
+- **Build command:** `npm ci --include=dev && npm --workspace @cloak/server run db:generate && npm --workspace @cloak/server run build`
+- **Start command:** `npm --workspace @cloak/server run db:deploy && node apps/server/dist/main.js`
+- **Root Directory:** blank (repo root)
+
+> ⚠️ `--include=dev` is required. The build tools (`tsup`, `typescript`, `prisma`)
+> are devDependencies, so with `NODE_ENV=production` a plain `npm ci` skips them
+> and the build fails with `sh: tsup: not found`. If the host prunes devDeps
+> before the start phase and `db:deploy` errors with "prisma not found", drop
+> `db:deploy` from the start command (the DB is already migrated).
 
 > Free Render web services sleep after ~15 min idle and cold-start on the next
 > request. Fine for testing; upgrade the instance for always-on.

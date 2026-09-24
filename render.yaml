@@ -9,7 +9,7 @@ services:
     plan: free
     region: singapore # closest free region to India; change if you prefer
     branch: main
-    buildCommand: npm ci && npm --workspace @cloak/server run db:generate && npm --workspace @cloak/server run build
+    buildCommand: npm ci --include=dev && npm --workspace @cloak/server run db:generate && npm --workspace @cloak/server run build
     # Apply pending migrations, then start. (Move db:deploy to a manual/one-off
     # job if you scale beyond a single instance.)
     startCommand: npm --workspace @cloak/server run db:deploy && node apps/server/dist/main.js
