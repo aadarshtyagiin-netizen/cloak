@@ -95,48 +95,65 @@ export async function sendChannelMessage(
     rootAuthorId = ensured.rootAuthorId;
   }
 
-  const created = await prisma.message.create({
-    data: {
-      channelId,
-      authorId: profileId,
-      body,
-      parentId: input.parentId ?? null,
-      threadId,
-      contentType: isVoice ? 'VOICE' : 'TEXT',
-    },
-    select: { id: true },
-  });
-
   // Link uploaded attachments (incl. the voice audio) to this message.
   const allAttachmentIds = isVoice ? [...attachmentIds, input.voice!.attachmentId] : attachmentIds;
-  if (allAttachmentIds.length > 0) {
-    await mediaService.linkAttachments(created.id, profileId, allAttachmentIds);
-  }
-  if (input.voice) {
-    await prisma.voiceMessage.create({
+
+  // Fast path: a plain message (no attachments/voice) is created and returned
+  // with all its relations in ONE round-trip. Attachment/voice messages must
+  // create the link rows first, so they insert, link, then re-fetch.
+  let message;
+  if (allAttachmentIds.length === 0) {
+    message = await prisma.message.create({
       data: {
-        messageId: created.id,
-        attachmentId: input.voice.attachmentId,
-        durationMs: input.voice.durationMs,
-        waveform: input.voice.waveform.slice(0, 256),
+        channelId,
+        authorId: profileId,
+        body,
+        parentId: input.parentId ?? null,
+        threadId,
+        contentType: isVoice ? 'VOICE' : 'TEXT',
       },
+      include: messageInclude,
     });
+  } else {
+    const created = await prisma.message.create({
+      data: {
+        channelId,
+        authorId: profileId,
+        body,
+        parentId: input.parentId ?? null,
+        threadId,
+        contentType: isVoice ? 'VOICE' : 'TEXT',
+      },
+      select: { id: true },
+    });
+    await mediaService.linkAttachments(created.id, profileId, allAttachmentIds);
+    if (input.voice) {
+      await prisma.voiceMessage.create({
+        data: {
+          messageId: created.id,
+          attachmentId: input.voice.attachmentId,
+          durationMs: input.voice.durationMs,
+          waveform: input.voice.waveform.slice(0, 256),
+        },
+      });
+    }
+    message = await prisma.message.findUnique({ where: { id: created.id }, include: messageInclude });
   }
 
+  const finalMessage = message!;
   if (threadId) void threadsService.bumpReply(threadId);
 
-  void gamificationService.awardXp(profileId, 'MESSAGE_SENT', { sourceType: 'message', sourceId: created.id });
+  void gamificationService.awardXp(profileId, 'MESSAGE_SENT', { sourceType: 'message', sourceId: finalMessage.id });
   void gamificationService.touchStreak(profileId);
   if (threadId && rootAuthorId && rootAuthorId !== profileId) {
     void gamificationService.awardXp(rootAuthorId, 'THREAD_STARTED', { sourceType: 'thread', sourceId: threadId });
   }
   void notificationsService.notifyChannelMessage(
-    { messageId: created.id, channelId, authorId: profileId, body },
+    { messageId: finalMessage.id, channelId, authorId: profileId, body },
     { rootAuthorId },
   );
 
-  const message = await prisma.message.findUnique({ where: { id: created.id }, include: messageInclude });
-  return toPublicMessage(message!, profileId);
+  return toPublicMessage(finalMessage, profileId);
 }
 
 export async function editMessage(

@@ -29,7 +29,8 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Stream a file. No auth guard — the signed token in the query IS the
-  // capability, so <img>/<video> tags can load it same-origin (incl. via ngrok).
+  // capability, so <img>/<video>/<audio> tags can load it same-origin (incl. via ngrok).
+  // Supports HTTP Range so audio/video can seek and so Safari/iOS will play at all.
   app.get<{ Params: { id: string }; Querystring: { token?: string } }>('/:id', async (req, reply) => {
     const { id } = req.params;
     if (!verifyMediaToken(id, req.query.token)) {
@@ -37,9 +38,30 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     }
     const att = await mediaService.getAttachment(id);
     if (!att || !(await storage.exists(att.storageKey))) throw AppError.notFound('Media');
+
+    const size = att.size;
+    reply.header('Accept-Ranges', 'bytes');
     reply.header('Cache-Control', 'private, max-age=3600');
-    reply.header('Content-Length', att.size.toString());
     reply.header('Content-Disposition', `inline; filename="cloak-${att.id}"`);
-    return reply.type(att.mime).send(await storage.getStream(att.storageKey));
+    reply.type(att.mime);
+
+    const rangeHeader = req.headers.range;
+    const match = rangeHeader ? /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim()) : null;
+    if (match) {
+      let start = match[1] ? Number.parseInt(match[1], 10) : 0;
+      let end = match[2] ? Number.parseInt(match[2], 10) : size - 1;
+      if (!Number.isFinite(start)) start = 0;
+      if (!Number.isFinite(end) || end >= size) end = size - 1;
+      if (start > end || start >= size || start < 0) {
+        return reply.code(416).header('Content-Range', `bytes */${size}`).send();
+      }
+      reply.code(206);
+      reply.header('Content-Range', `bytes ${start}-${end}/${size}`);
+      reply.header('Content-Length', (end - start + 1).toString());
+      return reply.send(await storage.getStream(att.storageKey, { start, end }));
+    }
+
+    reply.header('Content-Length', size.toString());
+    return reply.send(await storage.getStream(att.storageKey));
   });
 }

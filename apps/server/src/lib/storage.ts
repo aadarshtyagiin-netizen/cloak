@@ -25,7 +25,8 @@ export interface StorageDriver {
   readonly name: string;
   ensure(): Promise<void>;
   put(key: string, data: Buffer, contentType?: string): Promise<void>;
-  getStream(key: string): Promise<Readable>;
+  /** Stream an object. Pass a byte range for HTTP Range (partial content) reads. */
+  getStream(key: string, range?: { start: number; end: number }): Promise<Readable>;
   exists(key: string): Promise<boolean>;
   delete(key: string): Promise<void>;
 }
@@ -58,8 +59,8 @@ class LocalStorageDriver implements StorageDriver {
     await writeFile(this.pathFor(key), data);
   }
 
-  async getStream(key: string): Promise<Readable> {
-    return createReadStream(this.pathFor(key));
+  async getStream(key: string, range?: { start: number; end: number }): Promise<Readable> {
+    return createReadStream(this.pathFor(key), range ? { start: range.start, end: range.end } : {});
   }
 
   async exists(key: string): Promise<boolean> {
@@ -116,9 +117,15 @@ class S3StorageDriver implements StorageDriver {
     );
   }
 
-  async getStream(key: string): Promise<Readable> {
+  async getStream(key: string, range?: { start: number; end: number }): Promise<Readable> {
     assertKey(key);
-    const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    const res = await this.client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Range: range ? `bytes=${range.start}-${range.end}` : undefined,
+      }),
+    );
     return res.Body as Readable;
   }
 
