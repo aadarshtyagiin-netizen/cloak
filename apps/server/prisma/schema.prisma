@@ -1,0 +1,946 @@
+// Cloak — Prisma schema
+// Models the FULL product so later phases are additive. Phase 1 uses a subset
+// (AuthUser, AnonymousProfile, Session, EmailVerification, Channel,
+// ChannelMember, Message) but every entity from the design lives here.
+//
+// PRIVACY INVARIANT: only AnonymousProfile.authUserId, and the auth/moderation
+// tables, ever reference AuthUser. No public entity references AuthUser. The API
+// response mapper is the sole place allowed to build client DTOs and it cannot
+// emit email / realName / employeeId / authUserId.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  DEACTIVATED
+}
+
+enum AvatarKind {
+  GENERATED
+  UPLOADED
+}
+
+enum PresenceStatus {
+  ONLINE
+  AWAY
+  DND
+  OFFLINE
+  INVISIBLE
+}
+
+enum ChannelVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum ChannelMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum NotificationLevel {
+  ALL
+  MENTIONS
+  IMPORTANT
+  NOTHING
+}
+
+enum MessageContentType {
+  TEXT
+  MARKDOWN
+  SYSTEM
+  VOICE
+  POLL
+  GIF
+  STICKER
+}
+
+enum AttachmentKind {
+  IMAGE
+  VIDEO
+  AUDIO
+  PDF
+  DOCUMENT
+  OTHER
+}
+
+enum AttachmentStatus {
+  PENDING
+  READY
+  REJECTED
+}
+
+enum PollMode {
+  SINGLE
+  MULTI
+}
+
+enum NotificationType {
+  MENTION
+  DM
+  THREAD_REPLY
+  CHANNEL_MESSAGE
+  REACTION
+  VOICE_ROOM
+  EVENT
+  SYSTEM
+}
+
+enum XPEventType {
+  MESSAGE_SENT
+  REACTION_RECEIVED
+  HELPFUL_MARK
+  DAILY_STREAK
+  POLL_CREATED
+  THREAD_STARTED
+  VOICE_JOIN
+  ACHIEVEMENT
+}
+
+enum ReportTargetType {
+  MESSAGE
+  USER
+  CHANNEL
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+enum ModerationActionType {
+  WARN
+  MUTE
+  UNMUTE
+  CHANNEL_BAN
+  SUSPEND
+  BAN
+  UNBAN
+  DELETE_MESSAGE
+  UNMASK_IDENTITY
+}
+
+enum EventRSVPStatus {
+  GOING
+  MAYBE
+  NOT_GOING
+}
+
+enum ConfessionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum RandomPairStatus {
+  WAITING
+  MATCHED
+  ENDED
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Identity (internal + public)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// PRIVATE. The accountable identity. Never serialized to clients.
+model AuthUser {
+  id              String        @id @default(cuid())
+  email           String        @unique
+  emailNormalized String        @unique
+  employeeId      String?
+  role            Role          @default(USER)
+  status          AccountStatus @default(ACTIVE)
+  lastLoginAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  profile                  AnonymousProfile?
+  sessions                 Session[]
+  oauthAccounts            OAuthAccount[]
+  moderationActionsMade    ModerationAction[] @relation("ModActor")
+  moderationActionsAgainst ModerationAction[] @relation("ModTargetUser")
+  auditLogs                AuditLog[]         @relation("AuditActor")
+  reportsHandled           Report[]           @relation("ReportHandler")
+  confessionsModerated     Confession[]
+
+  @@index([status])
+}
+
+/// PUBLIC. Everything the community sees references THIS id, never AuthUser.
+model AnonymousProfile {
+  id               String         @id @default(cuid())
+  authUserId       String         @unique
+  username         String         @unique
+  usernameLower    String         @unique
+  avatarKind       AvatarKind     @default(GENERATED)
+  avatarSeed       String
+  avatarUrl        String?
+  bio              String?        @db.VarChar(280)
+  karma            Int            @default(0)
+  xp               Int            @default(0)
+  level            Int            @default(1)
+  presenceVisible  Boolean        @default(true)
+  presenceStatus   PresenceStatus @default(OFFLINE)
+  regenCount       Int            @default(0)
+  lastRegenAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  authUser AuthUser @relation(fields: [authUserId], references: [id], onDelete: Cascade)
+
+  channelMemberships      ChannelMember[]
+  channelsCreated         Channel[]
+  messages                Message[]
+  reactions               Reaction[]
+  bookmarks               Bookmark[]
+  pinsCreated             Pin[]
+  threadSubscriptions     ThreadSubscription[]
+  attachmentsUploaded     Attachment[]
+  dmParticipants          DMParticipant[]
+  notificationsReceived   Notification[]           @relation("NotifRecipient")
+  notificationsActed      Notification[]           @relation("NotifActor")
+  notificationPreferences NotificationPreference[]
+  pollsCreated            Poll[]
+  pollVotes               PollVote[]
+  badges                  UserBadge[]
+  xpEvents                XPEvent[]
+  streak                  Streak?
+  achievements            UserAchievement[]
+  reportsFiled            Report[]                 @relation("ReportReporter")
+  reportsTargeting        Report[]                 @relation("ReportTarget")
+  blocksMade              Block[]                  @relation("Blocker")
+  blockedBy               Block[]                  @relation("Blocked")
+  mutesMade               Mute[]                   @relation("Muter")
+  mutedBy                 Mute[]                   @relation("Muted")
+  voiceRoomsCreated       VoiceRoom[]
+  videoRoomsCreated       VideoRoom[]
+  voiceParticipations     VoiceRoomParticipant[]
+  videoParticipations     VideoRoomParticipant[]
+  eventsCreated           Event[]
+  eventRsvps              EventRSVP[]
+  icebreakerAnswers       IcebreakerAnswer[]
+  confessions             Confession[]
+  moderationTargeting     ModerationAction[]       @relation("ModActionTargetProfile")
+  randomPairsAsA          RandomPairSession[]      @relation("PairA")
+  randomPairsAsB          RandomPairSession[]      @relation("PairB")
+
+  @@index([karma])
+  @@index([xp])
+}
+
+model OAuthAccount {
+  id                String   @id @default(cuid())
+  authUserId        String
+  provider          String
+  providerAccountId String
+  createdAt         DateTime @default(now())
+
+  authUser AuthUser @relation(fields: [authUserId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([authUserId])
+}
+
+/// Rotating refresh-token sessions + device management. Refresh token stored HASHED.
+model Session {
+  id           String    @id @default(cuid())
+  authUserId   String
+  tokenHash    String    @unique
+  deviceLabel  String?
+  userAgent    String?
+  ip           String?
+  createdAt    DateTime  @default(now())
+  lastActiveAt DateTime  @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?
+
+  authUser AuthUser @relation(fields: [authUserId], references: [id], onDelete: Cascade)
+
+  @@index([authUserId, revokedAt])
+}
+
+/// Email OTP challenge. Exists before an AuthUser on first login, so it is keyed
+/// by normalized email rather than a relation. Code stored HASHED.
+model EmailVerification {
+  id              String    @id @default(cuid())
+  emailNormalized String
+  codeHash        String
+  attempts        Int       @default(0)
+  consumedAt      DateTime?
+  expiresAt       DateTime
+  createdAt       DateTime  @default(now())
+
+  @@index([emailNormalized, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Channels
+// ─────────────────────────────────────────────────────────────────────────
+
+model Channel {
+  id                 String            @id @default(cuid())
+  slug               String            @unique
+  name               String
+  description        String?
+  topic              String?
+  visibility         ChannelVisibility @default(PUBLIC)
+  isArchived         Boolean           @default(false)
+  isSystem           Boolean           @default(false)
+  createdByProfileId String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  createdBy AnonymousProfile? @relation(fields: [createdByProfileId], references: [id])
+
+  members  ChannelMember[]
+  messages Message[]
+  pins     Pin[]
+  polls    Poll[]
+  events   Event[]
+
+  @@index([visibility, isArchived])
+}
+
+model ChannelMember {
+  id                String            @id @default(cuid())
+  channelId         String
+  profileId         String
+  role              ChannelMemberRole @default(MEMBER)
+  notificationLevel NotificationLevel @default(ALL)
+  lastReadMessageId String?
+  joinedAt          DateTime          @default(now())
+
+  channel Channel          @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  profile AnonymousProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, profileId])
+  @@index([profileId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Messaging (channels + DMs + threads + reactions)
+// ─────────────────────────────────────────────────────────────────────────
+
+model Message {
+  id                 String             @id @default(cuid())
+  // Exactly one of channelId / dmThreadId is set (enforced in the service layer).
+  channelId          String?
+  dmThreadId         String?
+  authorId           String
+  threadId           String? // the thread this message belongs to (a reply)
+  parentId           String? // direct reply-to message
+  body               String
+  contentType        MessageContentType @default(TEXT)
+  editedAt           DateTime?
+  deletedAt          DateTime?
+  deletedByProfileId String? // logical FK (app-enforced); moderator or author
+  createdAt          DateTime           @default(now())
+
+  channel      Channel?             @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  dmThread     DirectMessageThread? @relation(fields: [dmThreadId], references: [id], onDelete: Cascade)
+  author       AnonymousProfile     @relation(fields: [authorId], references: [id])
+  thread       Thread?              @relation("ThreadReplies", fields: [threadId], references: [id])
+  parent       Message?             @relation("MessageReplies", fields: [parentId], references: [id])
+  replies      Message[]            @relation("MessageReplies")
+  rootedThread Thread?              @relation("ThreadRoot")
+  reactions    Reaction[]
+  attachments  Attachment[]
+  bookmarks    Bookmark[]
+  pins         Pin[]
+  poll         Poll?
+  voiceMessage VoiceMessage?
+
+  @@index([channelId, createdAt])
+  @@index([dmThreadId, createdAt])
+  @@index([threadId])
+  @@index([authorId])
+}
+
+model Thread {
+  id            String   @id @default(cuid())
+  rootMessageId String   @unique
+  channelId     String?
+  replyCount    Int      @default(0)
+  lastReplyAt   DateTime?
+  createdAt     DateTime @default(now())
+
+  rootMessage   Message              @relation("ThreadRoot", fields: [rootMessageId], references: [id], onDelete: Cascade)
+  messages      Message[]            @relation("ThreadReplies")
+  subscriptions ThreadSubscription[]
+}
+
+model ThreadSubscription {
+  id         String   @id @default(cuid())
+  threadId   String
+  profileId  String
+  subscribed Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  thread  Thread           @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  profile AnonymousProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, profileId])
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  messageId String
+  profileId String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message          @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  profile AnonymousProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, profileId, emoji])
+  @@index([messageId])
+}
+
+model Bookmark {
+  id        String   @id @default(cuid())
+  profileId String
+  messageId String
+  createdAt DateTime @default(now())
+
+  profile AnonymousProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  message Message          @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, messageId])
+}
+
+model Pin {
+  id                 String   @id @default(cuid())
+  channelId          String
+  messageId          String
+  pinnedByProfileId  String
+  createdAt          DateTime @default(now())
+
+  channel  Channel          @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  message  Message          @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  pinnedBy AnonymousProfile @relation(fields: [pinnedByProfileId], references: [id])
+
+  @@unique([channelId, messageId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Direct messages
+// ─────────────────────────────────────────────────────────────────────────
+
+model DirectMessageThread {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  lastMessageAt DateTime?
+
+  participants DMParticipant[]
+  messages     Message[]
+}
+
+model DMParticipant {
+  id                String   @id @default(cuid())
+  threadId          String
+  profileId         String
+  lastReadMessageId String?
+  createdAt         DateTime @default(now())
+
+  thread  DirectMessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  profile AnonymousProfile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, profileId])
+  @@index([profileId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Media
+// ─────────────────────────────────────────────────────────────────────────
+
+model Attachment {
+  id                String           @id @default(cuid())
+  messageId         String?
+  uploaderProfileId String
+  storageKey        String
+  mime              String
+  size              Int
+  kind              AttachmentKind
+  status            AttachmentStatus @default(PENDING)
+  thumbnailKey      String?
+  width             Int?
+  height            Int?
+  durationMs        Int?
+  createdAt         DateTime         @default(now())
+
+  message      Message?         @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  uploader     AnonymousProfile @relation(fields: [uploaderProfileId], references: [id])
+  voiceMessage VoiceMessage?
+
+  @@index([messageId])
+  @@index([uploaderProfileId])
+}
+
+model VoiceMessage {
+  id           String   @id @default(cuid())
+  messageId    String   @unique
+  attachmentId String   @unique
+  durationMs   Int
+  waveform     Int[]
+  downloadable Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  message    Message    @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  attachment Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Voice & Video rooms (SFU signaling metadata)
+// ─────────────────────────────────────────────────────────────────────────
+
+model VoiceRoom {
+  id                 String    @id @default(cuid())
+  name               String
+  channelId          String?
+  createdByProfileId String
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  endedAt            DateTime?
+
+  createdBy    AnonymousProfile       @relation(fields: [createdByProfileId], references: [id])
+  participants VoiceRoomParticipant[]
+
+  @@index([isActive])
+}
+
+model VoiceRoomParticipant {
+  id         String    @id @default(cuid())
+  roomId     String
+  profileId  String
+  isMuted    Boolean   @default(false)
+  isDeafened Boolean   @default(false)
+  handRaised Boolean   @default(false)
+  joinedAt   DateTime  @default(now())
+  leftAt     DateTime?
+
+  room    VoiceRoom        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  profile AnonymousProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+}
+
+model VideoRoom {
+  id                 String    @id @default(cuid())
+  name               String
+  channelId          String?
+  createdByProfileId String
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  endedAt            DateTime?
+
+  createdBy    AnonymousProfile       @relation(fields: [createdByProfileId], references: [id])
+  participants VideoRoomParticipant[]
+
+  @@index([isActive])
+}
+
+model VideoRoomParticipant {
+  id            String    @id @default(cuid())
+  roomId        String
+  profileId     String
+  cameraOn      Boolean   @default(false)
+  micOn         Boolean   @default(true)
+  screenSharing Boolean   @default(false)
+  handRaised    Boolean   @default(false)
+  joinedAt      DateTime  @default(now())
+  leftAt        DateTime?
+
+  room    VideoRoom        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  profile AnonymousProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Notifications
+// ─────────────────────────────────────────────────────────────────────────
+
+model Notification {
+  id             String           @id @default(cuid())
+  recipientId    String
+  actorProfileId String?
+  type           NotificationType
+  channelId      String?
+  messageId      String?
+  payload        Json
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  recipient AnonymousProfile  @relation("NotifRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor     AnonymousProfile? @relation("NotifActor", fields: [actorProfileId], references: [id])
+
+  @@index([recipientId, readAt, createdAt])
+}
+
+model NotificationPreference {
+  id        String            @id @default(cuid())
+  profileId String
+  channelId String? // null = global default
+  level     NotificationLevel @default(ALL)
+
+  profile AnonymousProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, channelId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Polls
+// ─────────────────────────────────────────────────────────────────────────
+
+model Poll {
+  id                 String    @id @default(cuid())
+  channelId          String
+  messageId          String?   @unique
+  createdByProfileId String
+  question           String
+  mode               PollMode  @default(SINGLE)
+  anonymous          Boolean   @default(true)
+  expiresAt          DateTime?
+  createdAt          DateTime  @default(now())
+
+  channel   Channel          @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  message   Message?         @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  createdBy AnonymousProfile @relation(fields: [createdByProfileId], references: [id])
+  options   PollOption[]
+  votes     PollVote[]
+}
+
+model PollOption {
+  id       String @id @default(cuid())
+  pollId   String
+  label    String
+  position Int    @default(0)
+
+  poll  Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes PollVote[]
+}
+
+model PollVote {
+  id        String   @id @default(cuid())
+  pollId    String
+  optionId  String
+  profileId String
+  createdAt DateTime @default(now())
+
+  poll    Poll             @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option  PollOption       @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  profile AnonymousProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([optionId, profileId])
+  @@index([pollId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Gamification: badges, XP, streaks, achievements
+// ─────────────────────────────────────────────────────────────────────────
+
+model Badge {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  emoji       String
+  description String
+  criteria    Json
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  userBadges UserBadge[]
+}
+
+model UserBadge {
+  id        String   @id @default(cuid())
+  profileId String
+  badgeId   String
+  awardedAt DateTime @default(now())
+
+  profile AnonymousProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  badge   Badge            @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, badgeId])
+}
+
+model XPEvent {
+  id         String      @id @default(cuid())
+  profileId  String
+  type       XPEventType
+  amount     Int
+  sourceType String?
+  sourceId   String?
+  createdAt  DateTime    @default(now())
+
+  profile AnonymousProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, createdAt])
+}
+
+model Streak {
+  id           String    @id @default(cuid())
+  profileId    String    @unique
+  current      Int       @default(0)
+  longest      Int       @default(0)
+  lastActiveOn DateTime? @db.Date
+
+  profile AnonymousProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model Achievement {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String
+  emoji       String
+  metric      String // e.g. "messages_sent", "people_helped"
+  threshold   Int
+  isActive    Boolean  @default(true)
+
+  userAchievements UserAchievement[]
+}
+
+model UserAchievement {
+  id            String    @id @default(cuid())
+  profileId     String
+  achievementId String
+  progress      Int       @default(0)
+  completedAt   DateTime?
+
+  profile     AnonymousProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  achievement Achievement      @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, achievementId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Moderation, blocking, reporting, audit
+// ─────────────────────────────────────────────────────────────────────────
+
+model Report {
+  id                 String           @id @default(cuid())
+  reporterProfileId  String
+  targetType         ReportTargetType
+  targetProfileId    String?
+  targetMessageId    String?
+  targetChannelId    String?
+  reason             String
+  details            String?
+  status             ReportStatus     @default(OPEN)
+  handledByAuthUserId String?
+  createdAt          DateTime         @default(now())
+  resolvedAt         DateTime?
+
+  reporter     AnonymousProfile   @relation("ReportReporter", fields: [reporterProfileId], references: [id])
+  targetProfile AnonymousProfile? @relation("ReportTarget", fields: [targetProfileId], references: [id])
+  handledBy    AuthUser?          @relation("ReportHandler", fields: [handledByAuthUserId], references: [id])
+  actions      ModerationAction[]
+
+  @@index([status, createdAt])
+}
+
+model Block {
+  id               String   @id @default(cuid())
+  blockerProfileId String
+  blockedProfileId String
+  createdAt        DateTime @default(now())
+
+  blocker AnonymousProfile @relation("Blocker", fields: [blockerProfileId], references: [id], onDelete: Cascade)
+  blocked AnonymousProfile @relation("Blocked", fields: [blockedProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerProfileId, blockedProfileId])
+}
+
+model Mute {
+  id             String   @id @default(cuid())
+  muterProfileId String
+  mutedProfileId String
+  createdAt      DateTime @default(now())
+
+  muter AnonymousProfile @relation("Muter", fields: [muterProfileId], references: [id], onDelete: Cascade)
+  muted AnonymousProfile @relation("Muted", fields: [mutedProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([muterProfileId, mutedProfileId])
+}
+
+/// Moderator actions. targetAuthUser is PRIVATE and only set for account-level
+/// actions. UNMASK_IDENTITY actions must be paired with an AuditLog row.
+model ModerationAction {
+  id                  String               @id @default(cuid())
+  moderatorAuthUserId String
+  action              ModerationActionType
+  targetAuthUserId    String?
+  targetProfileId     String?
+  targetMessageId     String?
+  channelId           String?
+  reportId            String?
+  reason              String
+  expiresAt           DateTime?
+  createdAt           DateTime             @default(now())
+
+  moderator     AuthUser          @relation("ModActor", fields: [moderatorAuthUserId], references: [id])
+  targetAuthUser AuthUser?        @relation("ModTargetUser", fields: [targetAuthUserId], references: [id])
+  targetProfile AnonymousProfile? @relation("ModActionTargetProfile", fields: [targetProfileId], references: [id])
+  report        Report?           @relation(fields: [reportId], references: [id])
+
+  @@index([moderatorAuthUserId, createdAt])
+}
+
+/// Append-only audit trail. EVERY identity unmask writes a row here.
+model AuditLog {
+  id              String   @id @default(cuid())
+  actorAuthUserId String?
+  action          String
+  subjectType     String
+  subjectId       String
+  metadata        Json?
+  ip              String?
+  createdAt       DateTime @default(now())
+
+  actor AuthUser? @relation("AuditActor", fields: [actorAuthUserId], references: [id])
+
+  @@index([action, createdAt])
+  @@index([subjectType, subjectId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Community features (polls above; events, icebreakers, confessions, pairing)
+// Trivia / meme-battle / watch-party extend these same patterns in Phase 8.
+// ─────────────────────────────────────────────────────────────────────────
+
+model Event {
+  id                 String    @id @default(cuid())
+  channelId          String?
+  createdByProfileId String
+  title              String
+  description        String?
+  startsAt           DateTime
+  endsAt             DateTime?
+  location           String?
+  createdAt          DateTime  @default(now())
+
+  channel   Channel?         @relation(fields: [channelId], references: [id])
+  createdBy AnonymousProfile @relation(fields: [createdByProfileId], references: [id])
+  rsvps     EventRSVP[]
+
+  @@index([startsAt])
+}
+
+model EventRSVP {
+  id        String          @id @default(cuid())
+  eventId   String
+  profileId String
+  status    EventRSVPStatus @default(GOING)
+  createdAt DateTime        @default(now())
+
+  event   Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  profile AnonymousProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, profileId])
+}
+
+model Icebreaker {
+  id        String   @id @default(cuid())
+  prompt    String
+  activeOn  DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  answers IcebreakerAnswer[]
+
+  @@unique([activeOn])
+}
+
+model IcebreakerAnswer {
+  id           String   @id @default(cuid())
+  icebreakerId String
+  profileId    String
+  body         String
+  createdAt    DateTime @default(now())
+
+  icebreaker Icebreaker       @relation(fields: [icebreakerId], references: [id], onDelete: Cascade)
+  profile    AnonymousProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([icebreakerId, profileId])
+}
+
+/// Anonymous even from other users. authorProfileId is kept for pre-publication
+/// moderation + audit only, and is NEVER serialized to clients.
+model Confession {
+  id                   String           @id @default(cuid())
+  authorProfileId      String
+  body                 String
+  status               ConfessionStatus @default(PENDING)
+  moderatedByAuthUserId String?
+  publishedAt          DateTime?
+  createdAt            DateTime         @default(now())
+
+  author      AnonymousProfile @relation(fields: [authorProfileId], references: [id])
+  moderatedBy AuthUser?        @relation(fields: [moderatedByAuthUserId], references: [id])
+
+  @@index([status, createdAt])
+}
+
+model RandomPairSession {
+  id         String           @id @default(cuid())
+  profileAId String
+  profileBId String?
+  status     RandomPairStatus @default(WAITING)
+  startedAt  DateTime?
+  endedAt    DateTime?
+  createdAt  DateTime         @default(now())
+
+  profileA AnonymousProfile  @relation("PairA", fields: [profileAId], references: [id])
+  profileB AnonymousProfile? @relation("PairB", fields: [profileBId], references: [id])
+
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Config + link previews
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Admin-configurable quick reactions (❤️ Like, 😂 Funny, 🔥 Fire, …).
+model ReactionPreset {
+  id       String  @id @default(cuid())
+  key      String  @unique
+  emoji    String
+  label    String
+  position Int     @default(0)
+  isActive Boolean @default(true)
+}
+
+/// Server-side (SSRF-guarded) link preview cache.
+model LinkPreview {
+  id          String   @id @default(cuid())
+  url         String   @unique
+  title       String?
+  description String?
+  imageUrl    String?
+  siteName    String?
+  status      String   @default("OK")
+  fetchedAt   DateTime @default(now())
+}

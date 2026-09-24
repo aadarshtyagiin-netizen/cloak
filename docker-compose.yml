@@ -1,0 +1,75 @@
+# Local development infrastructure for Cloak.
+#   docker compose up -d
+# Brings up Postgres, Redis, Mailhog (email catcher), and MinIO (object storage).
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cloak-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cloak
+      POSTGRES_PASSWORD: cloak
+      POSTGRES_DB: cloak
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./.docker-data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloak -d cloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: cloak-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./.docker-data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Catches all outgoing email in dev. UI at http://localhost:8025
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: cloak-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI
+
+  # S3-compatible object storage for media (used from Phase 3). Console at :9001
+  # NOTE: MinIO removed its community images from Docker Hub (late 2025), so we
+  # pull from the quay.io mirror instead of `minio/minio:latest`.
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: cloak-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: cloak
+      MINIO_ROOT_PASSWORD: cloak-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./.docker-data/minio:/data
+
+  # LiveKit SFU — scalable voice/video rooms (replaces the old WebRTC mesh).
+  # Dev mode uses the well-known key/secret "devkey"/"secret". For production,
+  # run with a real config + keys and expose behind TLS/TURN.
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: cloak-livekit
+    restart: unless-stopped
+    command: --dev --bind 0.0.0.0
+    ports:
+      - "7880:7880"      # signaling (ws/http)
+      - "7881:7881"      # RTC over TCP (fallback)
+      - "7882:7882/udp"  # RTC media (UDP mux)

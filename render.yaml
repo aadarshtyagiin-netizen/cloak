@@ -1,0 +1,66 @@
+# Render Blueprint for the Cloak API (persistent Node + Socket.IO server).
+# Deploy: push to GitHub → Render dashboard → New → Blueprint → pick this repo.
+# Secrets (sync:false) are entered in the Render dashboard, never committed.
+# The web SPA is deployed separately to Cloudflare Pages (see docs/DEPLOY.md).
+services:
+  - type: web
+    name: cloak-api
+    runtime: node
+    plan: free
+    region: singapore # closest free region to India; change if you prefer
+    branch: main
+    buildCommand: npm ci && npm --workspace @cloak/server run db:generate && npm --workspace @cloak/server run build
+    # Apply pending migrations, then start. (Move db:deploy to a manual/one-off
+    # job if you scale beyond a single instance.)
+    startCommand: npm --workspace @cloak/server run db:deploy && node apps/server/dist/main.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: EMAIL_TRANSPORT
+        value: smtp
+      - key: OTP_DEV_LOG
+        value: "false"
+      - key: STORAGE_DRIVER
+        value: s3
+      - key: COOKIE_SAMESITE
+        value: none
+      - key: ALLOWED_EMAIL_DOMAINS
+        value: snapdeal.com
+      - key: LIVEKIT_URL
+        value: wss://cloak-plsdhrf0.livekit.cloud
+      # ── Secrets: set these in the Render dashboard ──
+      - key: DATABASE_URL # Supabase SESSION pooler string (port 5432, IPv4)
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: WEB_ORIGIN # your Cloudflare Pages URL, e.g. https://cloak.pages.dev
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      - key: S3_ENDPOINT
+        value: https://s3.eu-central-003.backblazeb2.com
+      - key: S3_REGION
+        value: eu-central-003
+      - key: S3_BUCKET
+        value: cloakapp
+      - key: S3_ACCESS_KEY_ID # Backblaze keyID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY # Backblaze applicationKey
+        sync: false
+      - key: SMTP_HOST
+        value: smtp-relay.brevo.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER # Brevo login, e.g. baea17001@smtp-brevo.com
+        sync: false
+      - key: SMTP_PASS # Brevo SMTP key
+        sync: false
+      - key: EMAIL_FROM
+        value: Cloak <aadarsh.tyagi@snapdeal.com>

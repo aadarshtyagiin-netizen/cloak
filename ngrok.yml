@@ -1,0 +1,22 @@
+# Optional project-local ngrok config for Cloak.
+#
+# You do NOT need this file for the simple flow (`npm run tunnel`), which uses
+# your global ngrok config. Use this only if you want a named/reserved tunnel.
+#
+# One-time setup (free account): grab your token from
+#   https://dashboard.ngrok.com/get-started/your-authtoken
+# then either run `ngrok config add-authtoken <token>` (writes the global config)
+# or uncomment and set it below.
+#
+# Run with:  ngrok start --config ngrok.yml cloak-web
+version: "2"
+# authtoken: <your-ngrok-authtoken>
+tunnels:
+  cloak-web:
+    proto: http
+    addr: 5173
+    # A single tunnel to the Vite dev server is enough: Vite proxies /v1,
+    # /socket.io and /health to the API on :4000, so the whole app (REST + WS +
+    # auth cookie) is served same-origin through this one URL.
+    schemes:
+      - https

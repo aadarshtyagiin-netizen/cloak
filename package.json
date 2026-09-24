@@ -1,0 +1,36 @@
+{
+  "name": "cloak",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloak — an anonymous community chat app for Snapdeal. Anonymous to the community, accountable to the platform.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm --workspace @cloak/server run dev",
+    "dev:web": "npm --workspace @cloak/web run dev",
+    "build": "npm --workspace @cloak/server run build && npm --workspace @cloak/web run build",
+    "db:migrate": "npm --workspace @cloak/server run db:migrate",
+    "db:seed": "npm --workspace @cloak/server run db:seed",
+    "db:reset": "npm --workspace @cloak/server run db:reset",
+    "test": "npm --workspace @cloak/server run test",
+    "lint": "npm --workspace @cloak/server run lint && npm --workspace @cloak/web run lint",
+    "format": "prettier --write \"apps/**/src/**/*.{ts,tsx,css}\" \"docs/**/*.md\"",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "tunnel": "ngrok http 5173",
+    "dev:public": "concurrently -n server,web,tunnel -c cyan,magenta,yellow \"npm:dev:server\" \"npm:dev:web\" \"npm:tunnel\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "prettier": "^3.3.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@ngrok/ngrok": "^1.7.0"
+  }
+}
