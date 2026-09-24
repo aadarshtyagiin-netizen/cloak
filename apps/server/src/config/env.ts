@@ -47,13 +47,16 @@ const schema = z.object({
 
   // Email. `console` logs only (dev/test); `smtp` uses any real SMTP relay
   // (Mailhog in dev, SES/Workspace/etc. in prod); `resend` uses the Resend
-  // HTTPS API (recommended for production — resilient to blocked SMTP ports).
-  EMAIL_TRANSPORT: z.enum(['smtp', 'console', 'resend']).default('console'),
+  // HTTPS API; `brevo` uses the Brevo HTTPS API (recommended in production —
+  // rides port 443, so it works on hosts that block outbound SMTP like Render).
+  EMAIL_TRANSPORT: z.enum(['smtp', 'console', 'resend', 'brevo']).default('console'),
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: z.coerce.number().int().positive().default(1025),
   SMTP_USER: z.string().default(''),
   SMTP_PASS: z.string().default(''),
   RESEND_API_KEY: z.string().default(''),
+  // Brevo transactional-email API key (`xkeysib-…`). Used when EMAIL_TRANSPORT=brevo.
+  BREVO_API_KEY: z.string().default(''),
   EMAIL_FROM: z.string().default('Cloak <no-reply@snapdeal.com>'),
   EMAIL_REPLY_TO: z.string().default(''),
 

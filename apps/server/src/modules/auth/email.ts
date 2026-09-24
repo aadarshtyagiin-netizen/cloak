@@ -119,8 +119,62 @@ class ResendEmailProvider implements EmailProvider {
   }
 }
 
+/** Parse `"Name <email@host>"` (or a bare address) into Brevo's sender shape. */
+function parseEmailFrom(from: string): { name?: string; email: string } {
+  const m = from.match(/^\s*(.*?)\s*<\s*([^>]+?)\s*>\s*$/);
+  if (m) return { name: m[1] || undefined, email: m[2].trim() };
+  return { email: from.trim() };
+}
+
+/**
+ * Brevo (Sendinblue) transactional email over their HTTPS API. Unlike SMTP,
+ * this rides port 443, so it works on hosts that block outbound SMTP ports —
+ * e.g. Render's free tier blocks 25/465/587. Set EMAIL_TRANSPORT=brevo and
+ * BREVO_API_KEY (an `xkeysib-…` key from Brevo → SMTP & API → API Keys). The
+ * sender is taken from EMAIL_FROM and must be a Verified sender in Brevo.
+ */
+class BrevoApiEmailProvider implements EmailProvider {
+  readonly name = 'brevo-api';
+  readonly delivers = true;
+
+  async send(msg: EmailMessage): Promise<void> {
+    if (!config.BREVO_API_KEY) throw new Error('BREVO_API_KEY is not set');
+    const sender = parseEmailFrom(config.EMAIL_FROM);
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': config.BREVO_API_KEY,
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        sender,
+        to: [{ email: msg.to }],
+        replyTo: config.EMAIL_REPLY_TO ? { email: config.EMAIL_REPLY_TO } : undefined,
+        subject: msg.subject,
+        textContent: msg.text,
+        htmlContent: msg.html ?? msg.text,
+      }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      throw new Error(`Brevo API error ${res.status}: ${detail.slice(0, 300)}`);
+    }
+  }
+
+  async verify(): Promise<boolean> {
+    if (!config.BREVO_API_KEY) {
+      logger.warn('EMAIL_TRANSPORT=brevo but BREVO_API_KEY is empty — codes will not be delivered');
+      return false;
+    }
+    return true;
+  }
+}
+
 function createProvider(): EmailProvider {
   switch (config.EMAIL_TRANSPORT) {
+    case 'brevo':
+      return new BrevoApiEmailProvider();
     case 'resend':
       return new ResendEmailProvider();
     case 'smtp':
