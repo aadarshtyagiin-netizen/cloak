@@ -80,6 +80,16 @@ export function RoomPage(): JSX.Element {
           connect
           audio
           video={roomKind === 'video'}
+          options={{
+            // Reduce "hot mic" / background-noise pickup by explicitly enabling the
+            // browser's audio processing on the captured microphone. Without this the
+            // mic can transmit keyboard/ambient noise and feel overly sensitive.
+            audioCaptureDefaults: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+          }}
           onDisconnected={leave}
           onError={(e) =>
             pushToast('error', e?.message ? `Room error: ${e.message}` : 'Lost connection to the room.')

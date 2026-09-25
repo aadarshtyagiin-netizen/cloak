@@ -20,16 +20,19 @@ export function EmojiPicker({
   const recent = useMemo(() => getRecentEmojis(), []);
 
   useEffect(() => {
-    function onDown(e: MouseEvent): void {
+    // Use `click` (not `mousedown`) so the trigger button's own onClick — which
+    // fires first — can toggle the picker closed without this handler racing it
+    // open again (the classic "picker won't close / flickers" bug).
+    function onClickOutside(e: MouseEvent): void {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     }
     function onKey(e: KeyboardEvent): void {
       if (e.key === 'Escape') onClose();
     }
-    document.addEventListener('mousedown', onDown);
+    document.addEventListener('click', onClickOutside);
     document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('click', onClickOutside);
       document.removeEventListener('keydown', onKey);
     };
   }, [onClose]);

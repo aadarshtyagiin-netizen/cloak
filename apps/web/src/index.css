@@ -4,11 +4,11 @@
 
 :root {
   --surface: 255 255 255;
-  --surface-2: 247 247 251;
-  --surface-3: 237 237 245;
-  --ink: 18 18 28;
-  --ink-soft: 96 96 120;
-  --line: 225 225 236;
+  --surface-2: 245 246 250;
+  --surface-3: 230 232 240;
+  --ink: 17 17 27;
+  --ink-soft: 74 76 99;
+  --line: 201 205 219;
 }
 
 .dark {
@@ -66,4 +66,14 @@
   .card {
     @apply rounded-2xl border border-line bg-surface-2;
   }
+}
+
+
+/* Light mode: the indigo brand accents are tuned for dark backgrounds, so accent
+   TEXT (links, labels) washes out on white. Darken it to brand-600 for legibility.
+   Scoped to :root:not(.dark) since the `.dark` class lives on <html> (dark mode
+   keeps the lighter shades). */
+:root:not(.dark) .text-brand-300,
+:root:not(.dark) .text-brand-400 {
+  color: #4f46e5;
 }
