@@ -13,6 +13,12 @@ const schema = z.object({
   SERVER_PORT: z.coerce.number().int().positive().default(4000),
   WEB_ORIGIN: z.string().default('http://localhost:5173'),
 
+  // Public base URL of THIS API (scheme+host, no trailing slash). Needed so media
+  // links are ABSOLUTE when the web app is on a different origin (e.g. Cloudflare
+  // Pages web + Render API). Empty falls back to Render's injected
+  // RENDER_EXTERNAL_URL, then to a relative URL (dev/same-origin via Vite proxy).
+  API_PUBLIC_URL: z.string().default(''),
+
   // Domain restriction
   ALLOWED_EMAIL_DOMAINS: z.string().default('snapdeal.com'),
   ALLOW_TEST_DOMAIN: boolFlag('false'),
@@ -110,6 +116,16 @@ export const allowedEmailDomains: string[] = (() => {
 
 export const isProd = config.NODE_ENV === 'production';
 export const isTest = config.NODE_ENV === 'test';
+
+/**
+ * Absolute public base URL of this API (no trailing slash), used to build media
+ * links that load cross-origin. Falls back to Render's injected RENDER_EXTERNAL_URL;
+ * empty means same-origin relative URLs (dev via the Vite proxy).
+ */
+export const apiPublicUrl: string = (config.API_PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || '').replace(
+  /\/+$/,
+  '',
+);
 
 /** Emails (lowercased) that should receive the ADMIN role on login. */
 export const adminEmails: string[] = config.ADMIN_EMAILS.split(',')

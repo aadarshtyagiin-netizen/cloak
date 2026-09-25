@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { config } from '../config/env.js';
+import { apiPublicUrl, config } from '../config/env.js';
 
 /**
  * Signed capability URLs for private media. A media URL carries an HMAC over
@@ -35,7 +35,12 @@ export function verifyMediaToken(attachmentId: string, token: string | undefined
   }
 }
 
-/** Relative, same-origin URL that streams the attachment through the API. */
+/**
+ * URL that streams the attachment through the API. Absolute (pointing at this
+ * API's public origin) when API_PUBLIC_URL / RENDER_EXTERNAL_URL is set, so it
+ * loads from <img>/<video>/<audio> tags even when the web app is on a different
+ * origin (Cloudflare Pages web + Render API). Relative otherwise (dev proxy).
+ */
 export function mediaUrl(attachmentId: string): string {
-  return `/v1/media/${attachmentId}?token=${signMediaToken(attachmentId)}`;
+  return `${apiPublicUrl}/v1/media/${attachmentId}?token=${signMediaToken(attachmentId)}`;
 }
