@@ -1,10 +1,16 @@
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Play, Pause, Loader2, FileText, File as FileIcon } from 'lucide-react';
 import { ApiError, linkPreviewApi, pollsApi } from '../../lib/api';
 import { applyPollUpdate } from '../../lib/messageCache';
 import { useUI } from '../../store/ui';
 import { cx } from '../../components/ui';
 import type { PublicAttachment, PublicMessage, PublicPoll, PublicVoiceMessage } from '../../types';
+
+function fmtTime(sec: number): string {
+  const s = Number.isFinite(sec) && sec > 0 ? Math.floor(sec) : 0;
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
 
 const URL_RE = /(https?:\/\/[^\s]+)/i;
 
@@ -50,17 +56,19 @@ function AttachmentView({ attachment: a }: { attachment: PublicAttachment }): JS
     return <video src={a.url} controls className="max-h-72 max-w-full rounded-xl border border-line" />;
   }
   if (a.kind === 'AUDIO') {
-    return <audio src={a.url} controls className="w-64" />;
+    return <audio src={a.url} controls preload="metadata" className="w-64" />;
   }
-  const icon = a.kind === 'PDF' ? '📄' : '📎';
+  const Icon = a.kind === 'PDF' ? FileText : FileIcon;
   return (
     <a
       href={a.url}
       target="_blank"
       rel="noreferrer"
-      className="flex items-center gap-2 rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm hover:border-brand-400"
+      className="flex items-center gap-3 rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-sm transition hover:border-brand-400 hover:bg-surface-3"
     >
-      <span className="text-xl">{icon}</span>
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-3 text-brand-300">
+        <Icon className="h-5 w-5" />
+      </span>
       <span>
         <span className="block font-medium">{a.kind === 'PDF' ? 'PDF document' : 'File'}</span>
         <span className="text-xs text-ink-soft">{a.mime} · {humanSize(a.size)}</span>
@@ -72,58 +80,124 @@ function AttachmentView({ attachment: a }: { attachment: PublicAttachment }): JS
 const SPEEDS = [1, 1.5, 2, 0.5] as const;
 
 export function VoicePlayer({ voice }: { voice: PublicVoiceMessage }): JSX.Element {
+  const pushToast = useUI((s) => s.pushToast);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const barsRef = useRef<HTMLDivElement>(null);
+  const triedPlay = useRef(false);
   const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [speedIdx, setSpeedIdx] = useState(0);
-  const [progress, setProgress] = useState(0);
+  const [progress, setProgress] = useState(0); // 0..1
+  const [duration, setDuration] = useState(voice.durationMs / 1000);
 
   const peak = Math.max(1, ...voice.waveform);
-  const bars = voice.waveform.length > 0 ? voice.waveform : new Array(32).fill(6);
+  const bars = voice.waveform.length > 0 ? voice.waveform : new Array(40).fill(8);
+  const shown = bars.slice(0, 56);
+  const elapsed = duration * progress;
 
-  function toggle(): void {
+  async function toggle(): Promise<void> {
     const el = audioRef.current;
     if (!el) return;
-    if (playing) el.pause();
-    else void el.play();
+    if (playing) {
+      el.pause();
+      return;
+    }
+    triedPlay.current = true;
+    try {
+      setLoading(true);
+      // play() rejects on autoplay/codec errors — surface it instead of failing silently.
+      await el.play();
+    } catch {
+      setLoading(false);
+      pushToast('error', 'Could not play this voice message.');
+    }
   }
+
   function cycleSpeed(): void {
     const next = (speedIdx + 1) % SPEEDS.length;
     setSpeedIdx(next);
     if (audioRef.current) audioRef.current.playbackRate = SPEEDS[next];
   }
 
+  function seek(clientX: number): void {
+    const el = audioRef.current;
+    const bar = barsRef.current;
+    if (!el || !bar || !Number.isFinite(el.duration) || el.duration === 0) return;
+    const rect = bar.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    el.currentTime = ratio * el.duration;
+    setProgress(ratio);
+  }
+
   return (
-    <div className="flex max-w-sm items-center gap-3 rounded-2xl border border-line bg-surface-2 px-3 py-2">
+    <div className="flex max-w-sm items-center gap-3 rounded-2xl border border-line bg-surface-2 px-3 py-2.5">
       <button
-        onClick={toggle}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white"
-        aria-label={playing ? 'Pause' : 'Play'}
+        onClick={() => void toggle()}
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-500 text-white shadow-sm transition hover:bg-brand-600 active:scale-95"
+        aria-label={playing ? 'Pause voice message' : 'Play voice message'}
       >
-        {playing ? '⏸' : '▶'}
+        {loading ? (
+          <Loader2 className="h-5 w-5 animate-spin" />
+        ) : playing ? (
+          <Pause className="h-5 w-5" />
+        ) : (
+          <Play className="ml-0.5 h-5 w-5" />
+        )}
       </button>
-      <div className="flex h-8 flex-1 items-center gap-[2px]">
-        {bars.slice(0, 48).map((v, i) => {
-          const active = i / Math.min(bars.length, 48) <= progress;
-          return (
-            <span
-              key={i}
-              className={cx('w-[3px] rounded-full', active ? 'bg-brand-400' : 'bg-line')}
-              style={{ height: `${Math.max(10, (v / peak) * 100)}%` }}
-            />
-          );
-        })}
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div
+          ref={barsRef}
+          className="flex h-8 cursor-pointer items-center gap-[2px]"
+          onClick={(e) => seek(e.clientX)}
+          role="slider"
+          tabIndex={0}
+          aria-label="Seek voice message"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress * 100)}
+        >
+          {shown.map((v, i) => {
+            const active = i / shown.length <= progress;
+            return (
+              <span
+                key={i}
+                className={cx('w-[3px] shrink-0 rounded-full transition-colors', active ? 'bg-brand-400' : 'bg-line')}
+                style={{ height: `${Math.max(12, (v / peak) * 100)}%` }}
+              />
+            );
+          })}
+        </div>
+        <div className="flex items-center justify-between text-[11px] tabular-nums text-ink-soft">
+          <span>{fmtTime(elapsed)}</span>
+          <span>{fmtTime(duration)}</span>
+        </div>
       </div>
-      <button onClick={cycleSpeed} className="shrink-0 rounded-lg bg-surface-3 px-1.5 py-0.5 text-[11px] font-semibold">
+      <button
+        onClick={cycleSpeed}
+        className="shrink-0 rounded-lg bg-surface-3 px-1.5 py-0.5 text-[11px] font-semibold text-ink transition hover:bg-line/70"
+        title="Playback speed"
+      >
         {SPEEDS[speedIdx]}x
       </button>
       <audio
         ref={audioRef}
         src={voice.url}
+        preload="none"
+        onLoadedMetadata={(e) => {
+          const d = e.currentTarget.duration;
+          if (Number.isFinite(d) && d > 0) setDuration(d);
+        }}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
+        onWaiting={() => setLoading(true)}
+        onPlaying={() => setLoading(false)}
         onEnded={() => {
           setPlaying(false);
           setProgress(0);
+        }}
+        onError={() => {
+          setLoading(false);
+          if (triedPlay.current) pushToast('error', 'This voice message could not be loaded.');
         }}
         onTimeUpdate={(e) => {
           const el = e.currentTarget;

@@ -2,22 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  Cloak design tokens — a Discord-inspired system.
+  Colors are RGB triples so Tailwind can apply <alpha-value> (e.g. bg-surface/60).
+
+  Surface ladder (light → deep):
+    surface    main content / chat canvas
+    surface-2  panels, sidebar, cards, inputs
+    surface-3  hover / elevated / chips
+    surface-4  deepest rail + inset wells
+*/
 :root {
   --surface: 255 255 255;
-  --surface-2: 245 246 250;
-  --surface-3: 230 232 240;
-  --ink: 17 17 27;
-  --ink-soft: 74 76 99;
-  --line: 201 205 219;
+  --surface-2: 244 245 247;
+  --surface-3: 228 231 236;
+  --surface-4: 233 235 239;
+  --ink: 21 23 28;
+  --ink-soft: 78 82 92;
+  --line: 220 223 229;
+
+  --accent: 88 101 242; /* Discord blurple */
+  --positive: 35 165 90;
+  --warning: 240 178 50;
+  --danger: 218 55 60;
+
+  --radius: 0.75rem;
+  --shadow-color: 220 15% 30%;
 }
 
 .dark {
-  --surface: 12 12 20;
-  --surface-2: 20 20 31;
-  --surface-3: 31 31 47;
-  --ink: 233 233 244;
-  --ink-soft: 150 150 174;
-  --line: 39 39 55;
+  --surface: 49 51 56; /* #313338 chat */
+  --surface-2: 43 45 49; /* #2b2d31 sidebar/panels */
+  --surface-3: 60 63 71; /* #3c3f47 hover/elevated */
+  --surface-4: 30 31 34; /* #1e1f22 rail/wells */
+  --ink: 242 243 245;
+  --ink-soft: 151 158 168;
+  --line: 62 65 73;
+
+  --accent: 88 101 242;
+  --positive: 35 165 90;
+  --warning: 240 178 50;
+  --danger: 242 63 67;
+
+  --shadow-color: 240 30% 3%;
 }
 
 @layer base {
@@ -29,6 +56,10 @@
   body {
     @apply bg-surface text-ink antialiased;
     font-feature-settings: 'cv11', 'ss01';
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: rgb(var(--accent) / 0.32);
   }
   * {
     scrollbar-width: thin;
@@ -38,9 +69,18 @@
     width: 8px;
     height: 8px;
   }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
   *::-webkit-scrollbar-thumb {
-    background: rgb(var(--line));
+    background: rgb(var(--ink-soft) / 0.35);
     border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--ink-soft) / 0.55);
+    background-clip: content-box;
   }
   /* Every clickable element shows a pointer; disabled shows not-allowed. */
   button:not(:disabled),
@@ -57,7 +97,7 @@
   /* Visible keyboard focus for all interactive elements (components can override
      with their own focus-visible styles). Uses :where() so specificity stays 0. */
   :where(a, button, [role='button'], input, textarea, select, [tabindex]:not([tabindex='-1'])):focus-visible {
-    outline: 2px solid #6366f1;
+    outline: 2px solid rgb(var(--accent));
     outline-offset: 2px;
     border-radius: 6px;
   }
@@ -65,38 +105,51 @@
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold
-      transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500
-      disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold
+      transition-[background-color,box-shadow,transform,color] duration-150 focus:outline-none
+      focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-0
+      disabled:cursor-not-allowed disabled:opacity-50 active:translate-y-px;
   }
   .btn-primary {
-    @apply btn bg-brand-600 text-white hover:bg-brand-500 active:scale-[0.98] shadow-lg shadow-brand-600/20;
+    @apply btn bg-brand-500 text-white shadow-sm hover:bg-brand-600;
   }
   .btn-ghost {
     @apply btn bg-transparent text-ink-soft hover:bg-surface-3 hover:text-ink;
   }
   .btn-subtle {
-    @apply btn bg-surface-3 text-ink hover:bg-line;
+    @apply btn bg-surface-3 text-ink hover:bg-line/70;
+  }
+  .btn-danger {
+    @apply btn bg-danger text-white hover:brightness-110;
   }
   .input {
-    @apply w-full rounded-xl border border-line bg-surface-2 px-4 py-3 text-ink placeholder:text-ink-soft/60
-      focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 transition;
+    @apply w-full rounded-lg border border-line bg-surface-2 px-4 py-3 text-ink placeholder:text-ink-soft/60
+      transition-[border-color,box-shadow] focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/25;
   }
   .card {
-    @apply rounded-2xl border border-line bg-surface-2;
+    @apply rounded-2xl border border-line bg-surface-2 shadow-lg shadow-black/5;
+  }
+  /* Chrome icon button (sidebar rail, headers, composer). */
+  .chrome-btn {
+    @apply flex h-9 w-9 items-center justify-center rounded-lg text-ink-soft transition-colors duration-150
+      hover:bg-surface-3 hover:text-ink focus-visible:text-ink;
   }
 }
 
-
-/* Light mode: the indigo brand accents are tuned for dark backgrounds, so accent
-   TEXT (links, labels) washes out on white. Darken it to brand-600 for legibility.
-   Scoped to :root:not(.dark) since the `.dark` class lives on <html> (dark mode
-   keeps the lighter shades). */
+/* Light mode: the blurple accent is tuned for dark backgrounds, so accent TEXT
+   (links, labels) washes out on white. Darken it for legibility (>= 4.5:1).
+   Scoped to :root:not(.dark) since the `.dark` class lives on <html>. */
 :root:not(.dark) .text-brand-300,
 :root:not(.dark) .text-brand-400 {
-  color: #4f46e5;
+  color: #4149c9;
 }
 
+/* LiveKit rooms are always dark (Discord-style calls), regardless of app theme.
+   Keep its control bar compact and on-brand. */
+[data-lk-theme='default'] {
+  --lk-accent-bg: rgb(var(--accent));
+  --lk-accent2: rgb(var(--accent) / 0.85);
+}
 
 /* Accessibility: honor users who prefer reduced motion — neutralize the pop-in/
    slide-up/fade-in animations and long transitions instead of removing them. */

@@ -11,6 +11,7 @@ import {
 import { useSocket } from '../../lib/socket';
 import { useAuth } from '../../store/auth';
 import { useUI } from '../../store/ui';
+import { SmilePlus, MessageSquare, MoreHorizontal } from 'lucide-react';
 import { QUICK_REACTIONS } from '../../lib/emoji';
 import { Avatar, Modal, Spinner, cx } from '../../components/ui';
 import { EmojiPicker } from './EmojiPicker';
@@ -338,7 +339,7 @@ function MessageLine({
   }
 
   return (
-    <div className="group relative -mx-2 rounded-lg px-2 py-0.5 hover:bg-surface-2">
+    <div className="group relative -mx-2 rounded-lg px-2 py-0.5 transition-colors hover:bg-surface-2/70">
       {message.body && message.contentType !== 'POLL' ? (
         <MessageBody body={message.body} editedAt={message.editedAt} />
       ) : null}
@@ -348,32 +349,37 @@ function MessageLine({
       <ReactionChips message={message} onToggle={toggleReaction} />
 
       {/* Hover toolbar */}
-      <div className="absolute -top-3 right-2 hidden items-center gap-0.5 rounded-lg border border-line bg-surface-2 px-1 py-0.5 shadow group-hover:flex">
+      <div className="absolute -top-4 right-2 hidden items-center gap-0.5 rounded-xl border border-line bg-surface-2 p-0.5 shadow-pop group-hover:flex">
         {QUICK_REACTIONS.slice(0, 4).map((e) => (
           <button
             key={e}
             title={`React ${e}`}
             onClick={() => void toggleReaction(e)}
-            className="flex h-6 w-6 items-center justify-center rounded text-sm hover:bg-surface-3"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-base transition hover:scale-110 hover:bg-surface-3"
           >
             {e}
           </button>
         ))}
+        <span className="mx-0.5 h-5 w-px bg-line" aria-hidden />
         <div className="relative">
-          <HoverAction title="Pick emoji" onClick={() => setPicker((v) => !v)} label="😀" />
+          <HoverAction title="Add reaction" onClick={() => setPicker((v) => !v)} label={<SmilePlus className="h-[18px] w-[18px]" />} />
           {picker ? (
-            <div className="absolute bottom-8 right-0">
+            <div className="absolute bottom-9 right-0">
               <EmojiPicker onSelect={(e) => void toggleReaction(e)} onClose={() => setPicker(false)} />
             </div>
           ) : null}
         </div>
         {onOpenThread && !message.parentId ? (
-          <HoverAction title="Reply in thread" onClick={() => onOpenThread(message.id)} label="💬" />
+          <HoverAction
+            title="Reply in thread"
+            onClick={() => onOpenThread(message.id)}
+            label={<MessageSquare className="h-[18px] w-[18px]" />}
+          />
         ) : null}
         <div className="relative">
-          <HoverAction title="More" onClick={() => setMenu((v) => !v)} label="⋯" />
+          <HoverAction title="More" onClick={() => setMenu((v) => !v)} label={<MoreHorizontal className="h-[18px] w-[18px]" />} />
           {menu ? (
-            <div className="absolute bottom-8 right-0 z-40 w-40 rounded-lg border border-line bg-surface-2 py-1 text-sm shadow-xl">
+            <div className="absolute bottom-9 right-0 z-40 w-44 rounded-xl border border-line bg-surface-2 py-1 text-sm shadow-pop-lg">
               <MenuItem label="Copy text" onClick={copy} />
               <MenuItem
                 label="Quote"
@@ -425,13 +431,21 @@ function MenuItem({
   );
 }
 
-function HoverAction({ title, onClick, label }: { title: string; onClick: () => void; label: string }): JSX.Element {
+function HoverAction({
+  title,
+  onClick,
+  label,
+}: {
+  title: string;
+  onClick: () => void;
+  label: React.ReactNode;
+}): JSX.Element {
   return (
     <button
       title={title}
       aria-label={title}
       onClick={onClick}
-      className="flex h-6 w-6 items-center justify-center rounded text-xs hover:bg-surface-3"
+      className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-3 hover:text-ink"
     >
       {label}
     </button>

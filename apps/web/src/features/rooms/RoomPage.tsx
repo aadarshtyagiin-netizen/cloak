@@ -15,6 +15,17 @@ import {
 } from '@livekit/components-react';
 import { ConnectionState, type LocalAudioTrack } from 'livekit-client';
 import type { KrispNoiseFilterProcessor } from '@livekit/krisp-noise-filter';
+import {
+  ChevronLeft,
+  Headphones,
+  Loader2,
+  Mic,
+  MicOff,
+  Sparkles,
+  Video,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import { ApiError, roomsApi } from '../../lib/api';
 import { useUI } from '../../store/ui';
 import { Avatar, EmptyState, Spinner, cx } from '../../components/ui';
@@ -67,14 +78,27 @@ export function RoomPage(): JSX.Element {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-lk-theme="default">
-      <header className="flex items-center gap-3 border-b border-line px-4 py-3">
-        <button className="text-ink-soft hover:text-ink" onClick={leave}>←</button>
-        <h1 className="flex-1 truncate text-base font-bold">
-          <span className="mr-1.5">{roomKind === 'video' ? '📹' : '🎧'}</span>
-          {data.roomName || (roomKind === 'video' ? 'Video room' : 'Voice room')}
-        </h1>
-        <span className="hidden text-[11px] text-ink-soft sm:inline">Anonymous · powered by an SFU</span>
+    // `dark` forces the call surface to stay dark in BOTH app themes (like
+    // Discord), which also keeps LiveKit's white-on-dark UI readable.
+    <div className="dark flex min-h-0 flex-1 flex-col bg-surface-4 text-ink" data-lk-theme="default">
+      <header className="flex items-center gap-3 border-b border-line/60 bg-surface-2/60 px-4 py-3 backdrop-blur">
+        <button className="chrome-btn -ml-1" onClick={leave} aria-label="Back to rooms" title="Back to rooms">
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+        <span
+          className={cx(
+            'flex h-9 w-9 items-center justify-center rounded-xl',
+            roomKind === 'video' ? 'bg-brand-500/15 text-accent' : 'bg-positive/15 text-positive',
+          )}
+        >
+          {roomKind === 'video' ? <Video className="h-5 w-5" /> : <Headphones className="h-5 w-5" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-base font-bold leading-tight">
+            {data.roomName || (roomKind === 'video' ? 'Video room' : 'Voice room')}
+          </h1>
+          <p className="text-[11px] text-ink-soft">Anonymous · end-to-end via SFU</p>
+        </div>
       </header>
 
       <div className="min-h-0 flex-1">
@@ -139,8 +163,8 @@ function ConnectionBanner(): JSX.Element | null {
           ? 'Disconnected'
           : 'Connecting…';
   return (
-    <div className="flex items-center justify-center gap-2 border-b border-line bg-surface-2 px-4 py-1.5 text-xs text-ink-soft">
-      <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+    <div className="flex items-center justify-center gap-2 border-b border-line/60 bg-warning/10 px-4 py-1.5 text-xs font-medium text-warning">
+      <Loader2 className="h-3.5 w-3.5 animate-spin" />
       {label}
     </div>
   );
@@ -182,38 +206,56 @@ function VoiceRoom({ deafened, setDeafened }: { deafened: boolean; setDeafened: 
       {/* Shown only if the browser blocked autoplay — one click unlocks remote audio. */}
       <StartAudio
         label="🔊 Click to enable audio"
-        className="m-2 rounded-lg border border-amber-400/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-200"
+        className="m-3 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-sm font-medium text-warning"
       />
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-ink-soft">
+          <span className="inline-flex h-2 w-2 rounded-full bg-positive" />
+          {connected ? `In voice — ${participants.length} ${participants.length === 1 ? 'person' : 'people'}` : 'Connecting'}
+        </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {participants.map((p) => {
             const name = p.name || p.identity;
+            const muted = !p.isMicrophoneEnabled;
             return (
               <div
                 key={p.sid}
                 className={cx(
-                  'flex flex-col items-center gap-2 rounded-xl border bg-surface-2 p-4 transition',
-                  p.isSpeaking ? 'border-emerald-400 ring-2 ring-emerald-400/50' : 'border-line',
+                  'group relative flex flex-col items-center gap-3 rounded-2xl border bg-surface-2/80 p-5 transition',
+                  p.isSpeaking
+                    ? 'border-positive/70 ring-2 ring-positive/40'
+                    : 'border-line/70 hover:border-line',
                 )}
               >
-                <Avatar seed={name} username={name} size="lg" presence="ONLINE" />
-                <div className="flex items-center gap-1 text-sm">
-                  <span className="max-w-[90px] truncate">{name}{p.isLocal ? ' (you)' : ''}</span>
-                  <span>{p.isMicrophoneEnabled ? '🎤' : '🔇'}</span>
+                <div className={cx('rounded-full', p.isSpeaking && 'animate-speaking-ring')}>
+                  <Avatar seed={name} username={name} size="xl" />
+                </div>
+                <div className="flex max-w-full items-center gap-1.5">
+                  <span className="truncate text-sm font-semibold text-ink">
+                    {name}
+                    {p.isLocal ? ' (you)' : ''}
+                  </span>
+                  {muted ? (
+                    <MicOff className="h-3.5 w-3.5 shrink-0 text-danger" />
+                  ) : (
+                    <Mic className="h-3.5 w-3.5 shrink-0 text-ink-soft" />
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
         {connected && others === 0 ? (
-          <p className="mt-6 text-center text-sm text-ink-soft">
-            You’re connected and live. Voice rooms need at least one other person — open a second
-            browser (or invite a teammate) and join this same room to talk.
-          </p>
+          <div className="mx-auto mt-8 max-w-md rounded-2xl border border-line/70 bg-surface-2/60 p-5 text-center">
+            <p className="text-sm text-ink-soft">
+              You're connected and live. Voice rooms need at least one other person — open a second
+              browser (or invite a teammate) and join this same room to talk.
+            </p>
+          </div>
         ) : null}
       </div>
       {/* Controls: mic level on the left; mic/deafen/leave grouped on the right. */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line/60 bg-surface-4/80 px-4 py-3 backdrop-blur">
         <MicMeter />
         <div className="flex items-center gap-2">
           <NoiseFilterToggle />
@@ -221,15 +263,19 @@ function VoiceRoom({ deafened, setDeafened }: { deafened: boolean; setDeafened: 
             onClick={() => void toggleDeafen()}
             title={deafened ? 'Undeafen — restore audio and your mic' : 'Deafen — mute everyone and your mic'}
             className={cx(
-              'flex h-9 items-center gap-1.5 rounded-full px-4 text-sm font-semibold transition',
+              'flex h-9 items-center gap-2 rounded-full px-4 text-sm font-semibold transition',
               deafened
-                ? 'bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/40'
-                : 'bg-surface-3 text-ink hover:bg-line',
+                ? 'bg-danger/15 text-danger ring-1 ring-danger/40'
+                : 'bg-surface-3 text-ink hover:bg-line/70',
             )}
           >
-            {deafened ? '🔇 Deafened' : '🎧 Deafen'}
+            {deafened ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+            {deafened ? 'Deafened' : 'Deafen'}
           </button>
-          <ControlBar variation="minimal" controls={{ microphone: true, camera: false, screenShare: false, chat: false, leave: true }} />
+          <ControlBar
+            variation="minimal"
+            controls={{ microphone: true, camera: false, screenShare: false, chat: false, leave: true }}
+          />
         </div>
       </div>
     </div>
@@ -309,13 +355,14 @@ function NoiseFilterToggle(): JSX.Element | null {
       disabled={loading}
       title={on ? 'Background-noise filter is ON' : 'Reduce background noise'}
       className={cx(
-        'flex h-9 items-center gap-1.5 rounded-full px-4 text-sm font-semibold transition disabled:opacity-60',
+        'flex h-9 items-center gap-2 rounded-full px-4 text-sm font-semibold transition disabled:opacity-60',
         on
-          ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/40'
-          : 'bg-surface-3 text-ink hover:bg-line',
+          ? 'bg-positive/15 text-positive ring-1 ring-positive/40'
+          : 'bg-surface-3 text-ink hover:bg-line/70',
       )}
     >
-      {loading ? '🎙️ …' : on ? '🎙️ Noise filter on' : '🎙️ Reduce noise'}
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+      <span className="hidden sm:inline">{on ? 'Noise filter on' : 'Reduce noise'}</span>
     </button>
   );
 }
@@ -327,14 +374,18 @@ function MicMeter(): JSX.Element {
   const pct = isMicrophoneEnabled ? Math.min(100, Math.round(volume * 160)) : 0;
 
   if (lastMicrophoneError) {
-    return <span className="text-xs text-rose-400">🔇 Mic blocked — allow microphone access</span>;
+    return (
+      <span className="flex items-center gap-1.5 text-xs font-medium text-danger">
+        <MicOff className="h-4 w-4" /> Mic blocked — allow microphone access
+      </span>
+    );
   }
   return (
     <div className="flex items-center gap-2 text-xs text-ink-soft" title="Local microphone level">
-      <span>{isMicrophoneEnabled ? '🎤' : '🔇'}</span>
+      {isMicrophoneEnabled ? <Mic className="h-4 w-4 text-ink" /> : <MicOff className="h-4 w-4" />}
       <span className="relative h-1.5 w-24 overflow-hidden rounded-full bg-surface-3">
         <span
-          className="absolute inset-y-0 left-0 rounded-full bg-emerald-400 transition-[width] duration-75"
+          className="absolute inset-y-0 left-0 rounded-full bg-positive transition-[width] duration-75"
           style={{ width: `${pct}%` }}
         />
       </span>

@@ -6,7 +6,19 @@ import { useSocket } from '../../lib/socket';
 import { useUI } from '../../store/ui';
 import { useVoiceRecorder } from '../../lib/useVoiceRecorder';
 import { Avatar, Modal, cx } from '../../components/ui';
-import { Smile, BarChart3, Paperclip, Mic, X, Image as ImageIcon, Film } from 'lucide-react';
+import {
+  Smile,
+  BarChart3,
+  Paperclip,
+  Mic,
+  X,
+  Image as ImageIcon,
+  Film,
+  Send,
+  Megaphone,
+  Trash2,
+  Plus,
+} from 'lucide-react';
 import { EmojiPicker } from './EmojiPicker';
 import type { PublicAttachment, PublicChannel, PublicProfile } from '../../types';
 
@@ -118,6 +130,21 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
     }
     window.clearTimeout(stopTimer.current);
     stopTimer.current = window.setTimeout(stopTyping, 2000);
+  }
+
+  /** Insert text at the caret (or replace the current selection), then restore focus. */
+  function insertAtCaret(snippet: string): void {
+    const el = taRef.current;
+    const start = el?.selectionStart ?? value.length;
+    const end = el?.selectionEnd ?? value.length;
+    const next = value.slice(0, start) + snippet + value.slice(end);
+    setValue(next);
+    requestAnimationFrame(() => {
+      autoresize();
+      el?.focus();
+      const pos = start + snippet.length;
+      el?.setSelectionRange(pos, pos);
+    });
   }
 
   /** Replace the half-typed @token at the caret with the chosen handle. */
@@ -234,12 +261,19 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
 
   if (recorder.recording) {
     return (
-      <div className="border-t border-line p-3">
-        <div className="flex items-center gap-3 rounded-2xl border border-rose-500/50 bg-surface-2 px-4 py-3">
-          <span className="h-3 w-3 animate-pulse rounded-full bg-rose-500" />
-          <span className="flex-1 text-sm">Recording… {fmtDuration(recorder.elapsedMs)}</span>
-          <button className="btn-ghost h-8 px-3 py-0 text-xs" onClick={() => recorder.cancel()}>Cancel</button>
-          <button className="btn-primary h-8 px-3 py-0 text-xs" onClick={() => void finishVoice()}>Send voice</button>
+      <div className="px-4 pb-4">
+        <div className="flex items-center gap-3 rounded-2xl border border-danger/50 bg-surface-2 px-4 py-3 shadow-sm">
+          <span className="relative flex h-3 w-3">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger/60" />
+            <span className="relative inline-flex h-3 w-3 rounded-full bg-danger" />
+          </span>
+          <span className="flex-1 text-sm font-medium">Recording… {fmtDuration(recorder.elapsedMs)}</span>
+          <button className="btn-ghost h-8 gap-1.5 px-3 py-0 text-xs" onClick={() => recorder.cancel()}>
+            <Trash2 className="h-4 w-4" /> Cancel
+          </button>
+          <button className="btn-primary h-8 gap-1.5 px-3 py-0 text-xs" onClick={() => void finishVoice()}>
+            <Send className="h-4 w-4" /> Send
+          </button>
         </div>
       </div>
     );
@@ -247,7 +281,7 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
 
   return (
     <div
-      className="border-t border-line p-3"
+      className="px-4 pb-4 pt-1"
       onDragOver={(e) => {
         e.preventDefault();
         setDragOver(true);
@@ -270,45 +304,47 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
               <button
                 type="button"
                 aria-label="Remove attachment"
-                className="flex h-6 w-6 items-center justify-center rounded text-ink-soft hover:text-rose-400"
+                className="flex h-6 w-6 items-center justify-center rounded text-ink-soft transition hover:bg-surface-3 hover:text-danger"
                 onClick={() => setPending((p) => p.filter((x) => x.id !== a.id))}
               >
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
           ))}
-          {uploading ? <span className="text-xs text-ink-soft">Uploading…</span> : null}
+          {uploading ? <span className="self-center text-xs text-ink-soft">Uploading…</span> : null}
         </div>
       ) : null}
 
       <div className="relative">
         {mentionOpen ? (
-          <div className="absolute bottom-full left-0 z-40 mb-2 w-64 overflow-hidden rounded-xl border border-line bg-surface-2 py-1 shadow-xl">
+          <div className="absolute bottom-full left-0 z-40 mb-2 w-72 overflow-hidden rounded-xl border border-line bg-surface-2 py-1.5 shadow-pop-lg animate-pop-in">
             <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
-              Mention
+              Members
             </div>
             {suggestions.map((s, i) => (
               <button
                 key={s.broadcast ? `b:${s.username}` : `u:${s.profile?.id ?? s.username}`}
                 onMouseDown={(e) => {
-                  e.preventDefault(); // keep textarea focus
+                  e.preventDefault(); // keep textarea focus so applyMention can restore the caret
                   applyMention(s.username);
                 }}
                 onMouseEnter={() => setMentionIdx(i)}
                 className={cx(
-                  'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm',
-                  i === mentionIdx ? 'bg-surface-3' : 'hover:bg-surface-3',
+                  'flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left text-sm transition-colors',
+                  i === mentionIdx ? 'bg-brand-500/15' : 'hover:bg-surface-3',
                 )}
               >
                 {s.broadcast ? (
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500/20 text-sm">📣</span>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-warning/20 text-warning">
+                    <Megaphone className="h-4 w-4" />
+                  </span>
                 ) : (
                   <Avatar seed={s.profile!.avatarSeed} username={s.username} size="sm" url={s.profile!.avatarUrl} />
                 )}
                 <span className="min-w-0 flex-1 truncate">
-                  <span className="font-medium">@{s.username}</span>
+                  <span className="font-semibold text-ink">@{s.username}</span>
                   {s.broadcast ? (
-                    <span className="ml-1 text-xs text-ink-soft">notify the whole channel</span>
+                    <span className="ml-1.5 text-xs text-ink-soft">notify the whole channel</span>
                   ) : null}
                 </span>
               </button>
@@ -318,8 +354,10 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
 
         <div
           className={cx(
-            'flex items-end gap-2 rounded-2xl border bg-surface-2 px-3 py-1.5 transition',
-            dragOver ? 'border-brand-500 ring-2 ring-brand-500/30' : 'border-line focus-within:border-brand-500',
+            'flex items-end gap-1 rounded-2xl border px-2 py-1.5 transition-[border-color,box-shadow]',
+            dragOver
+              ? 'border-brand-500 bg-brand-500/5 ring-2 ring-brand-500/30'
+              : 'border-line bg-surface-3 focus-within:border-brand-500/60',
           )}
         >
           <div className="relative">
@@ -327,21 +365,17 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
               type="button"
               aria-label="Insert emoji"
               title="Emoji"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-3 hover:text-ink"
+              className={cx('chrome-btn', showEmoji && 'bg-surface-2 text-ink')}
               onClick={() => setShowEmoji((v) => !v)}
             >
               <Smile className="h-5 w-5" />
             </button>
             {showEmoji ? (
-              <div className="absolute bottom-10 left-0">
+              <div className="absolute bottom-12 left-0">
                 <EmojiPicker
                   onSelect={(e) => {
-                    setValue((v) => v + e);
+                    insertAtCaret(e);
                     setShowEmoji(false);
-                    requestAnimationFrame(() => {
-                      autoresize();
-                      taRef.current?.focus();
-                    });
                   }}
                   onClose={() => setShowEmoji(false)}
                 />
@@ -356,16 +390,16 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
             onKeyDown={onKeyDown}
             onKeyUp={(e) => detectMention(e.currentTarget)}
             onClick={(e) => detectMention(e.currentTarget)}
-            onBlur={() => setTimeout(() => setMentionQuery(null), 120)}
+            onBlur={() => setTimeout(() => setMentionQuery(null), 150)}
             onPaste={onPaste}
             placeholder={`Message #${channel.name}`}
-            className="max-h-44 flex-1 resize-none bg-transparent py-1.5 text-sm outline-none placeholder:text-ink-soft/60"
+            className="max-h-44 flex-1 resize-none self-center bg-transparent px-1 py-1.5 text-sm leading-relaxed outline-none placeholder:text-ink-soft/70"
           />
           <button
             type="button"
             aria-label="Create poll"
             title="Create poll"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-3 hover:text-ink"
+            className="chrome-btn"
             onClick={() => setPollOpen(true)}
           >
             <BarChart3 className="h-5 w-5" />
@@ -374,7 +408,7 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
             type="button"
             aria-label="Attach file"
             title="Attach file"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-3 hover:text-ink"
+            className="chrome-btn"
             onClick={() => fileRef.current?.click()}
           >
             <Paperclip className="h-5 w-5" />
@@ -384,14 +418,20 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
               type="button"
               aria-label="Record voice message"
               title="Record voice message"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-3 hover:text-ink"
+              className="chrome-btn"
               onClick={() => void startVoice()}
             >
               <Mic className="h-5 w-5" />
             </button>
           ) : null}
-          <button onClick={() => void send()} disabled={(!value.trim() && pending.length === 0) || sending} className="btn-primary h-9 px-4 py-0">
-            Send
+          <button
+            onClick={() => void send()}
+            disabled={(!value.trim() && pending.length === 0) || sending}
+            aria-label="Send message"
+            title="Send message"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white shadow-sm transition hover:bg-brand-600 active:scale-95 disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-ink-soft disabled:shadow-none"
+          >
+            <Send className="h-[18px] w-[18px]" />
           </button>
           <input
             ref={fileRef}
@@ -405,8 +445,10 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
           />
         </div>
       </div>
-      <p className="mt-1 px-1 text-[11px] text-ink-soft">
-        Enter to send · Shift+Enter for newline · @mention · drag &amp; drop or paste to attach
+      <p className="mt-1.5 px-1 text-[11px] text-ink-soft">
+        <kbd className="rounded bg-surface-3 px-1 font-sans">Enter</kbd> to send ·
+        <kbd className="ml-1 rounded bg-surface-3 px-1 font-sans">Shift+Enter</kbd> for a new line ·
+        <span className="ml-1">@ to mention · drag &amp; drop or paste to attach</span>
       </p>
 
       <CreatePollModal channelId={channel.id} open={pollOpen} onClose={() => setPollOpen(false)} />
@@ -456,15 +498,19 @@ function CreatePollModal({ channelId, open, onClose }: { channelId: string; open
                 onChange={(e) => setOptions((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))}
               />
               {options.length > 2 ? (
-                <button className="text-ink-soft hover:text-rose-400" onClick={() => setOptions((prev) => prev.filter((_, j) => j !== i))}>
-                  ✕
+                <button
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-3 hover:text-danger"
+                  aria-label={`Remove option ${i + 1}`}
+                  onClick={() => setOptions((prev) => prev.filter((_, j) => j !== i))}
+                >
+                  <X className="h-4 w-4" />
                 </button>
               ) : null}
             </div>
           ))}
           {options.length < 10 ? (
-            <button className="text-sm text-brand-300 hover:underline" onClick={() => setOptions((prev) => [...prev, ''])}>
-              + Add option
+            <button className="flex items-center gap-1.5 text-sm font-medium text-brand-300 hover:underline" onClick={() => setOptions((prev) => [...prev, ''])}>
+              <Plus className="h-4 w-4" /> Add option
             </button>
           ) : null}
         </div>

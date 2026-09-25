@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import clsx from 'clsx';
+import { VenetianMask, CircleCheck, CircleAlert, Info } from 'lucide-react';
 import { useUI } from '../store/ui';
 import type { Presence } from '../types';
 
@@ -88,7 +89,9 @@ export function Spinner({ className }: { className?: string }): JSX.Element {
 export function Logo({ className }: { className?: string }): JSX.Element {
   return (
     <span className={cx('inline-flex items-center gap-2 font-extrabold tracking-tight', className)}>
-      <span className="text-xl">🕶️</span>
+      <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-sm shadow-brand-600/30">
+        <VenetianMask className="h-4 w-4" />
+      </span>
       <span>Cloak</span>
     </span>
   );
@@ -98,24 +101,34 @@ export function Logo({ className }: { className?: string }): JSX.Element {
 export function Toaster(): JSX.Element {
   const toasts = useUI((s) => s.toasts);
   const dismiss = useUI((s) => s.dismissToast);
+  const ICON = { success: CircleCheck, error: CircleAlert, info: Info } as const;
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2">
-      {toasts.map((t) => (
-        <button
-          key={t.id}
-          onClick={() => dismiss(t.id)}
-          className={cx(
-            'pointer-events-auto max-w-sm animate-slide-up rounded-xl border px-4 py-3 text-sm shadow-xl',
-            t.kind === 'error'
-              ? 'border-rose-500/40 bg-rose-500/10 text-rose-200'
-              : t.kind === 'success'
-                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-100'
-                : 'border-line bg-surface-3 text-ink',
-          )}
-        >
-          {t.message}
-        </button>
-      ))}
+    <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex flex-col gap-2">
+      {toasts.map((t) => {
+        const Icon = ICON[t.kind];
+        return (
+          <button
+            key={t.id}
+            onClick={() => dismiss(t.id)}
+            className={cx(
+              'pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-xl border bg-surface-2 px-4 py-3 text-sm shadow-pop-lg animate-slide-up',
+              t.kind === 'error'
+                ? 'border-danger/40'
+                : t.kind === 'success'
+                  ? 'border-positive/40'
+                  : 'border-line',
+            )}
+          >
+            <Icon
+              className={cx(
+                'h-4 w-4 shrink-0',
+                t.kind === 'error' ? 'text-danger' : t.kind === 'success' ? 'text-positive' : 'text-brand-400',
+              )}
+            />
+            <span className="text-left text-ink">{t.message}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -217,8 +230,8 @@ export function Modal({
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal>
-      <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={onClose} aria-hidden />
-      <div className="card relative z-10 w-full max-w-md animate-pop-in p-6 shadow-2xl">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose} aria-hidden />
+      <div className="card relative z-10 w-full max-w-md animate-pop-in p-6 shadow-pop-lg">
         <h2 className="mb-4 text-lg font-bold">{title}</h2>
         {children}
       </div>

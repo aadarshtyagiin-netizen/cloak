@@ -1,6 +1,22 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import {
+  Home,
+  Search,
+  Mail,
+  Bell,
+  Bookmark,
+  Trophy,
+  Sparkles,
+  Headphones,
+  Video,
+  Shield,
+  Plus,
+  Hash,
+  Pin,
+  type LucideIcon,
+} from 'lucide-react';
 import { ApiError, channelExtrasApi } from '../../lib/api';
 import { decodeJwtRole } from '../../lib/jwt';
 import { useAuth } from '../../store/auth';
@@ -10,19 +26,27 @@ import { Logo, Modal, cx } from '../../components/ui';
 import { SelfCard } from './SelfCard';
 import type { PublicChannel } from '../../types';
 
-const NAV = [
-  { to: '/', icon: '🏠', label: 'Home', end: true },
-  { to: '/search', icon: '🔍', label: 'Search' },
-  { to: '/dm', icon: '✉️', label: 'Direct Messages' },
-  { to: '/notifications', icon: '🔔', label: 'Notifications', badge: true },
-  { to: '/bookmarks', icon: '🔖', label: 'Bookmarks' },
-  { to: '/leaderboard', icon: '🏆', label: 'Leaderboard' },
-  { to: '/community', icon: '✨', label: 'Community' },
-] as const;
+interface NavItem {
+  to: string;
+  icon: LucideIcon;
+  label: string;
+  end?: boolean;
+  badge?: boolean;
+}
 
-const ROOMS = [
-  { to: '/rooms/voice', icon: '🎧', label: 'Voice Rooms' },
-  { to: '/rooms/video', icon: '📹', label: 'Video Rooms' },
+const NAV: NavItem[] = [
+  { to: '/', icon: Home, label: 'Home', end: true },
+  { to: '/search', icon: Search, label: 'Search' },
+  { to: '/dm', icon: Mail, label: 'Direct Messages' },
+  { to: '/notifications', icon: Bell, label: 'Notifications', badge: true },
+  { to: '/bookmarks', icon: Bookmark, label: 'Bookmarks' },
+  { to: '/leaderboard', icon: Trophy, label: 'Leaderboard' },
+  { to: '/community', icon: Sparkles, label: 'Community' },
+];
+
+const ROOMS: NavItem[] = [
+  { to: '/rooms/voice', icon: Headphones, label: 'Voice Rooms' },
+  { to: '/rooms/video', icon: Video, label: 'Video Rooms' },
 ];
 
 export function Sidebar({
@@ -42,8 +66,11 @@ export function Sidebar({
 
   const linkClass = ({ isActive }: { isActive: boolean }): string =>
     cx(
-      'group flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition',
-      isActive ? 'bg-brand-600/15 text-ink' : 'text-ink-soft hover:bg-surface-3 hover:text-ink',
+      'group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
+      'before:absolute before:-left-3 before:top-1/2 before:h-5 before:w-1 before:-translate-y-1/2 before:rounded-r-full before:bg-brand-500 before:opacity-0 before:transition-opacity',
+      isActive
+        ? 'bg-surface-3 font-semibold text-ink before:opacity-100'
+        : 'text-ink-soft hover:bg-surface-3/60 hover:text-ink',
     );
 
   return (
@@ -59,52 +86,59 @@ export function Sidebar({
       >
         <div className="flex items-center justify-between px-1 py-2">
           <Logo className="text-lg" />
-          <span className="rounded-full bg-brand-600/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-300">
+          <span className="rounded-full bg-brand-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-300">
             anonymous
           </span>
         </div>
 
-        <input
-          className="input mt-2 py-2 text-sm"
-          placeholder="Search channels…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+        <div className="relative mt-2">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
+          <input
+            className="input py-2 pl-9 text-sm"
+            placeholder="Search channels…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
 
         <nav className="mt-4 flex-1 overflow-y-auto pr-1">
           <ul className="space-y-0.5">
-            {NAV.map((item) => (
-              <li key={item.to}>
-                <NavLink to={item.to} end={'end' in item ? item.end : false} className={linkClass} onClick={onCloseMobile}>
-                  <span>{item.icon}</span>
-                  <span className="flex-1 truncate font-medium">{item.label}</span>
-                  {'badge' in item && item.badge && unread > 0 ? (
-                    <span className="rounded-full bg-brand-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                      {unread > 99 ? '99+' : unread}
-                    </span>
-                  ) : null}
-                </NavLink>
-              </li>
-            ))}
+            {NAV.map((item) => {
+              const Icon = item.icon;
+              return (
+                <li key={item.to}>
+                  <NavLink to={item.to} end={item.end ?? false} className={linkClass} onClick={onCloseMobile}>
+                    <Icon className="h-[18px] w-[18px] shrink-0" />
+                    <span className="flex-1 truncate">{item.label}</span>
+                    {item.badge && unread > 0 ? (
+                      <span className="rounded-full bg-brand-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                        {unread > 99 ? '99+' : unread}
+                      </span>
+                    ) : null}
+                  </NavLink>
+                </li>
+              );
+            })}
           </ul>
 
           <div className="mb-1 mt-5 flex items-center justify-between px-2.5">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Channels</span>
             <button
-              className="text-ink-soft hover:text-ink"
+              className="flex h-5 w-5 items-center justify-center rounded text-ink-soft transition hover:bg-surface-3 hover:text-ink"
               title="Create channel"
+              aria-label="Create channel"
               onClick={() => setCreating(true)}
             >
-              ＋
+              <Plus className="h-4 w-4" />
             </button>
           </div>
           <ul className="space-y-0.5">
             {filtered.map((c) => (
               <li key={c.id}>
                 <NavLink to={`/c/${c.id}`} className={linkClass} onClick={onCloseMobile}>
-                  <span className="text-ink-soft">#</span>
-                  <span className="flex-1 truncate font-medium">{c.name}</span>
-                  {c.isSystem ? <span title="System channel">📌</span> : null}
+                  <Hash className="h-[18px] w-[18px] shrink-0 text-ink-soft" />
+                  <span className="flex-1 truncate">{c.name}</span>
+                  {c.isSystem ? <Pin className="h-3.5 w-3.5 shrink-0 text-ink-soft" aria-label="System channel" /> : null}
                 </NavLink>
               </li>
             ))}
@@ -117,19 +151,22 @@ export function Sidebar({
             Live rooms
           </div>
           <ul className="space-y-0.5">
-            {ROOMS.map((item) => (
-              <li key={item.to}>
-                <NavLink to={item.to} className={linkClass} onClick={onCloseMobile}>
-                  <span>{item.icon}</span>
-                  <span className="flex-1 truncate font-medium">{item.label}</span>
-                </NavLink>
-              </li>
-            ))}
+            {ROOMS.map((item) => {
+              const Icon = item.icon;
+              return (
+                <li key={item.to}>
+                  <NavLink to={item.to} className={linkClass} onClick={onCloseMobile}>
+                    <Icon className="h-[18px] w-[18px] shrink-0" />
+                    <span className="flex-1 truncate">{item.label}</span>
+                  </NavLink>
+                </li>
+              );
+            })}
             {role !== 'USER' ? (
               <li>
                 <NavLink to="/admin" className={linkClass} onClick={onCloseMobile}>
-                  <span>🛡️</span>
-                  <span className="flex-1 truncate font-medium">Admin</span>
+                  <Shield className="h-[18px] w-[18px] shrink-0" />
+                  <span className="flex-1 truncate">Admin</span>
                 </NavLink>
               </li>
             ) : null}

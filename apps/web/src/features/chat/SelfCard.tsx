@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Dice5, Sun, Moon, LogOut } from 'lucide-react';
 import { authApi, identityApi, ApiError } from '../../lib/api';
 import { useAuth } from '../../store/auth';
 import { useUI } from '../../store/ui';
@@ -39,8 +40,8 @@ export function SelfCard(): JSX.Element | null {
   }
 
   return (
-    <div className="mt-2 flex items-center gap-2 rounded-xl border border-line bg-surface p-2">
-      <Link to="/me" className="flex min-w-0 flex-1 items-center gap-2 hover:opacity-90" title="View your profile">
+    <div className="mt-2 flex items-center gap-2 rounded-xl border border-line bg-surface-4 p-2">
+      <Link to="/me" className="flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 transition hover:bg-surface-3" title="View your profile">
         <Avatar seed={profile.avatarSeed} username={profile.username} size="md" presence="ONLINE" url={profile.avatarUrl} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold">{profile.username}</div>
@@ -48,13 +49,18 @@ export function SelfCard(): JSX.Element | null {
         </div>
       </Link>
       <div className="flex items-center gap-0.5">
-        <IconButton title="Generate a new identity" onClick={regenerate} disabled={busy} label="🎲" />
+        <IconButton title="Generate a new identity" onClick={regenerate} disabled={busy}>
+          <Dice5 className="h-[18px] w-[18px]" />
+        </IconButton>
         <IconButton
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           onClick={toggleTheme}
-          label={theme === 'dark' ? '☀️' : '🌙'}
-        />
-        <IconButton title="Log out" onClick={logout} label="⎋" />
+        >
+          {theme === 'dark' ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+        </IconButton>
+        <IconButton title="Log out" onClick={logout}>
+          <LogOut className="h-[18px] w-[18px]" />
+        </IconButton>
       </div>
     </div>
   );
@@ -63,12 +69,12 @@ export function SelfCard(): JSX.Element | null {
 function IconButton({
   title,
   onClick,
-  label,
+  children,
   disabled,
 }: {
   title: string;
   onClick: () => void;
-  label: string;
+  children: React.ReactNode;
   disabled?: boolean;
 }): JSX.Element {
   return (
@@ -78,11 +84,11 @@ function IconButton({
       onClick={onClick}
       disabled={disabled}
       className={cx(
-        'flex h-8 w-8 items-center justify-center rounded-lg text-base transition hover:bg-surface-3',
+        'flex h-8 w-8 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-3 hover:text-ink',
         disabled && 'opacity-50',
       )}
     >
-      {label}
+      {children}
     </button>
   );
 }

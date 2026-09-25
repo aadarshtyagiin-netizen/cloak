@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Hash, Menu, Users, Pin } from 'lucide-react';
 import { channelExtrasApi } from '../../lib/api';
+import { cx } from '../../components/ui';
 import type { PublicChannel } from '../../types';
 import { MessageList } from './MessageList';
 import { Composer } from './Composer';
@@ -26,36 +28,38 @@ export function ChatView({
   return (
     <div className="flex min-h-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b border-line px-4 py-3">
+        <header className="flex items-center gap-2.5 border-b border-line bg-surface px-4 py-3 shadow-sm">
           {onOpenSidebar ? (
             <button
-              className="-ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-lg hover:bg-surface-3 md:hidden"
+              className="chrome-btn -ml-1 md:hidden"
               onClick={onOpenSidebar}
               aria-label="Open sidebar"
             >
-              ☰
+              <Menu className="h-5 w-5" />
             </button>
           ) : null}
+          <Hash className="h-5 w-5 shrink-0 text-ink-soft" />
           <div className="min-w-0 flex-1">
-            <h1 className="flex items-center gap-1 text-base font-bold">
-              <span className="text-ink-soft">#</span>
-              {channel.name}
-            </h1>
+            <h1 className="truncate text-base font-bold leading-tight">{channel.name}</h1>
             <p className="truncate text-xs text-ink-soft">
               {channel.topic ?? channel.description ?? 'No topic set'}
             </p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-ink-soft">
-            <span title="Members" className="hidden sm:inline">
-              👥 {channel.memberCount}
+          <div className="flex items-center gap-1.5 text-ink-soft">
+            <span
+              title="Members"
+              className="hidden items-center gap-1.5 rounded-lg bg-surface-3 px-2 py-1 text-xs font-medium sm:inline-flex"
+            >
+              <Users className="h-4 w-4" /> {channel.memberCount}
             </span>
             <div className="relative">
               <button
-                className="rounded-lg px-2 py-1 hover:bg-surface-3"
+                className={cx('chrome-btn', showPins && 'bg-surface-3 text-ink')}
                 title="Pinned messages"
+                aria-label="Pinned messages"
                 onClick={() => setShowPins((v) => !v)}
               >
-                📌
+                <Pin className="h-5 w-5" />
               </button>
               {showPins ? (
                 <div className="absolute right-0 top-9 z-40 w-80 rounded-xl border border-line bg-surface-2 p-2 shadow-xl">
