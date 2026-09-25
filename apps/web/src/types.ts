@@ -255,6 +255,23 @@ export interface RoomView {
   participants: RoomParticipant[];
 }
 
+export interface RoomHistoryParticipant {
+  profile: PublicProfile;
+  joinedAt: string;
+  leftAt: string | null;
+}
+
+export interface RoomHistoryView {
+  id: string;
+  kind: RoomKind;
+  name: string;
+  createdAt: string;
+  endedAt: string | null;
+  durationSec: number | null;
+  participantCount: number;
+  participants: RoomHistoryParticipant[];
+}
+
 export interface EventView {
   id: string;
   title: string;

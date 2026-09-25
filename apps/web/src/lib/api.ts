@@ -30,6 +30,7 @@ import type {
   ReportView,
   RoomKind,
   RoomView,
+  RoomHistoryView,
   SearchResult,
   ThreadView,
   UnmaskResult,
@@ -301,6 +302,7 @@ export const communityApi = {
 
 export const roomsApi = {
   list: (kind: RoomKind) => api<{ data: RoomView[] }>(`/v1/rooms/${kind}`),
+  history: (kind: RoomKind) => api<{ data: RoomHistoryView[] }>(`/v1/rooms/${kind}/history`),
   create: (kind: RoomKind, name: string) => api<{ room: RoomView }>(`/v1/rooms/${kind}`, { method: 'POST', body: { name } }),
   get: (kind: RoomKind, id: string) => api<{ room: RoomView }>(`/v1/rooms/${kind}/${id}`),
   join: (kind: RoomKind, id: string) => api<{ room: RoomView }>(`/v1/rooms/${kind}/${id}/join`, { method: 'POST' }),
@@ -308,7 +310,7 @@ export const roomsApi = {
   state: (kind: RoomKind, id: string, patch: Record<string, boolean>) =>
     api<void>(`/v1/rooms/${kind}/${id}/state`, { method: 'PATCH', body: { patch } }),
   token: (kind: RoomKind, id: string) =>
-    api<{ token: string; url: string; room: string; identity: string; username: string }>(
+    api<{ token: string; url: string; room: string; roomName: string; identity: string; username: string }>(
       `/v1/rooms/${kind}/${id}/token`,
       { method: 'POST' },
     ),

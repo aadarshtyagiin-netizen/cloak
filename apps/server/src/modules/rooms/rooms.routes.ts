@@ -11,6 +11,12 @@ export async function roomsRoutes(app: FastifyInstance): Promise<void> {
     return { data: await roomsService.listRooms(req.params.kind) };
   });
 
+  // History of ended rooms (duration + who was in). Static "history" segment is
+  // matched ahead of the "/:kind/:id" param route by Fastify's router.
+  app.get<{ Params: { kind: string } }>('/:kind/history', { preHandler: app.authGuard }, async (req) => {
+    return { data: await roomsService.roomHistory(req.params.kind) };
+  });
+
   app.post<{ Params: { kind: string } }>('/:kind', { preHandler: app.authGuard }, async (req, reply) => {
     const { profileId } = currentIdentity(req);
     const { name } = createSchema.parse(req.body ?? {});

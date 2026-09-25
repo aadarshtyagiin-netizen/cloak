@@ -20,6 +20,24 @@ export interface RoomView {
   participants: ParticipantView[];
 }
 
+export interface RoomHistoryParticipant {
+  profile: PublicProfile;
+  joinedAt: string;
+  leftAt: string | null;
+}
+
+export interface RoomHistoryView {
+  id: string;
+  kind: RoomKind;
+  name: string;
+  createdAt: string;
+  endedAt: string | null;
+  /** Seconds the room was live (createdAt → endedAt). */
+  durationSec: number | null;
+  participantCount: number;
+  participants: RoomHistoryParticipant[];
+}
+
 function assertKind(kind: string): RoomKind {
   if (kind !== 'voice' && kind !== 'video') throw AppError.notFound('Room');
   return kind;
@@ -62,6 +80,42 @@ export async function listRooms(kindRaw: string): Promise<RoomView[]> {
     createdAt: r.createdAt.toISOString(),
     participants: r.participants.map((p) => ({ profile: toPublicProfile(p.profile), state: videoState(p) })),
   }));
+}
+
+/**
+ * Ended rooms with how long they were live and everyone who was ever in them
+ * (with join/leave times). Powers the "Recent rooms" history list.
+ */
+export async function roomHistory(kindRaw: string, limit = 30): Promise<RoomHistoryView[]> {
+  const kind = assertKind(kindRaw);
+  const take = Math.min(Math.max(limit, 1), 100);
+  const toHistory = (r: {
+    id: string;
+    name: string;
+    createdAt: Date;
+    endedAt: Date | null;
+    participants: { joinedAt: Date; leftAt: Date | null; profile: Parameters<typeof toPublicProfile>[0] }[];
+  }): RoomHistoryView => ({
+    id: r.id,
+    kind,
+    name: r.name,
+    createdAt: r.createdAt.toISOString(),
+    endedAt: r.endedAt ? r.endedAt.toISOString() : null,
+    durationSec: r.endedAt ? Math.max(0, Math.round((r.endedAt.getTime() - r.createdAt.getTime()) / 1000)) : null,
+    participantCount: r.participants.length,
+    participants: r.participants.map((p) => ({
+      profile: toPublicProfile(p.profile),
+      joinedAt: p.joinedAt.toISOString(),
+      leftAt: p.leftAt ? p.leftAt.toISOString() : null,
+    })),
+  });
+  const include = { participants: { orderBy: { joinedAt: 'asc' as const }, include: { profile: true } } };
+  if (kind === 'voice') {
+    const rooms = await prisma.voiceRoom.findMany({ where: { isActive: false }, orderBy: { endedAt: 'desc' }, take, include });
+    return rooms.map(toHistory);
+  }
+  const rooms = await prisma.videoRoom.findMany({ where: { isActive: false }, orderBy: { endedAt: 'desc' }, take, include });
+  return rooms.map(toHistory);
 }
 
 export async function getRoom(kindRaw: string, roomId: string): Promise<RoomView> {
@@ -134,12 +188,13 @@ export async function updateState(
   }
 }
 
-export const roomsService = { listRooms, getRoom, createRoom, joinRoom, leaveRoom, updateState, issueRoomToken };
+export const roomsService = { listRooms, roomHistory, getRoom, createRoom, joinRoom, leaveRoom, updateState, issueRoomToken };
 
 export interface RoomToken {
   token: string;
   url: string;
   room: string;
+  roomName: string;
   identity: string;
   username: string;
 }
@@ -175,6 +230,9 @@ export async function issueRoomToken(kindRaw: string, roomId: string, profileId:
   const kind = assertKind(kindRaw);
   const profile = await prisma.anonymousProfile.findUnique({ where: { id: profileId }, select: { username: true } });
   if (!profile) throw AppError.notFound('Profile');
+  const roomRow = kind === 'voice'
+    ? await prisma.voiceRoom.findUnique({ where: { id: roomId }, select: { name: true } })
+    : await prisma.videoRoom.findUnique({ where: { id: roomId }, select: { name: true } });
   await joinRoom(kind, roomId, profileId);
 
   const room = `${kind}:${roomId}`;
@@ -185,5 +243,12 @@ export async function issueRoomToken(kindRaw: string, roomId: string, profileId:
   });
   at.addGrant({ roomJoin: true, room, canPublish: true, canSubscribe: true, canPublishData: true });
   const token = await at.toJwt();
-  return { token, url: config.LIVEKIT_URL, room, identity: profileId, username: profile.username };
+  return {
+    token,
+    url: config.LIVEKIT_URL,
+    room,
+    roomName: roomRow?.name ?? (kind === 'voice' ? 'Voice room' : 'Video room'),
+    identity: profileId,
+    username: profile.username,
+  };
 }

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import '@livekit/components-styles';
@@ -69,8 +69,11 @@ export function RoomPage(): JSX.Element {
     <div className="flex min-h-0 flex-1 flex-col" data-lk-theme="default">
       <header className="flex items-center gap-3 border-b border-line px-4 py-3">
         <button className="text-ink-soft hover:text-ink" onClick={leave}>←</button>
-        <h1 className="flex-1 text-base font-bold">{roomKind === 'video' ? '📹 Video room' : '🎧 Voice room'}</h1>
-        <span className="text-[11px] text-ink-soft">Anonymous · powered by an SFU</span>
+        <h1 className="flex-1 truncate text-base font-bold">
+          <span className="mr-1.5">{roomKind === 'video' ? '📹' : '🎧'}</span>
+          {data.roomName || (roomKind === 'video' ? 'Video room' : 'Voice room')}
+        </h1>
+        <span className="hidden text-[11px] text-ink-soft sm:inline">Anonymous · powered by an SFU</span>
       </header>
 
       <div className="min-h-0 flex-1">
@@ -96,16 +99,29 @@ export function RoomPage(): JSX.Element {
           }
           style={{ height: '100%' }}
         >
-          <div className="flex h-full flex-col">
-            <ConnectionBanner />
-            <div className="min-h-0 flex-1">
-              {roomKind === 'video' ? <VideoConference /> : <VoiceRoom />}
-            </div>
-          </div>
-          <RoomAudioRenderer />
+          <RoomSession roomKind={roomKind} />
         </LiveKitRoom>
       </div>
     </div>
+  );
+}
+
+/**
+ * Holds the shared deafen state and renders the room UI. Deafen mutes ALL
+ * incoming audio (RoomAudioRenderer volume→0) and your own mic, Discord-style.
+ */
+function RoomSession({ roomKind }: { roomKind: RoomKind }): JSX.Element {
+  const [deafened, setDeafened] = useState(false);
+  return (
+    <>
+      <div className="flex h-full flex-col">
+        <ConnectionBanner />
+        <div className="min-h-0 flex-1">
+          {roomKind === 'video' ? <VideoConference /> : <VoiceRoom deafened={deafened} setDeafened={setDeafened} />}
+        </div>
+      </div>
+      <RoomAudioRenderer volume={deafened ? 0 : 1} />
+    </>
   );
 }
 
@@ -130,11 +146,35 @@ function ConnectionBanner(): JSX.Element | null {
 }
 
 /** Voice-room layout: speaking-highlighted avatar tiles + a minimal control bar. */
-function VoiceRoom(): JSX.Element {
+function VoiceRoom({ deafened, setDeafened }: { deafened: boolean; setDeafened: (v: boolean) => void }): JSX.Element {
   const participants = useParticipants();
   const state = useConnectionState();
   const connected = state === ConnectionState.Connected;
   const others = participants.filter((p) => !p.isLocal).length;
+
+  const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
+  const micBeforeDeafen = useRef(true);
+
+  async function toggleDeafen(): Promise<void> {
+    if (!deafened) {
+      // Deafen: remember mic state, silence it and all incoming audio.
+      micBeforeDeafen.current = isMicrophoneEnabled;
+      try {
+        await localParticipant.setMicrophoneEnabled(false);
+      } catch {
+        /* ignore */
+      }
+      setDeafened(true);
+    } else {
+      // Undeafen: restore audio and the mic to how it was.
+      setDeafened(false);
+      try {
+        await localParticipant.setMicrophoneEnabled(micBeforeDeafen.current);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -171,9 +211,24 @@ function VoiceRoom(): JSX.Element {
           </p>
         ) : null}
       </div>
-      <div className="flex items-center justify-between gap-3 border-t border-line px-3 py-2">
+      {/* Controls: mic level on the left; mic/deafen/leave grouped on the right. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
         <MicMeter />
-        <ControlBar variation="minimal" controls={{ microphone: true, camera: false, screenShare: false, chat: false, leave: true }} />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void toggleDeafen()}
+            title={deafened ? 'Undeafen — restore audio and your mic' : 'Deafen — mute everyone and your mic'}
+            className={cx(
+              'flex h-9 items-center gap-1.5 rounded-full px-4 text-sm font-semibold transition',
+              deafened
+                ? 'bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/40'
+                : 'bg-surface-3 text-ink hover:bg-line',
+            )}
+          >
+            {deafened ? '🔇 Deafened' : '🎧 Deafen'}
+          </button>
+          <ControlBar variation="minimal" controls={{ microphone: true, camera: false, screenShare: false, chat: false, leave: true }} />
+        </div>
       </div>
     </div>
   );

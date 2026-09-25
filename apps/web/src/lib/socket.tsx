@@ -33,8 +33,24 @@ export function SocketProvider({ children }: { children: ReactNode }): JSX.Eleme
 
     const s = io(`${WS_BASE}/rt`, {
       auth: { token },
-      transports: ['websocket', 'polling'],
+      // Polling first, then upgrade to WebSocket. WS-first can silently fail
+      // behind some proxies / corporate networks (e.g. an office network),
+      // leaving the socket dead — which means no live messages AND no mention/DM
+      // notifications. Polling-first reliably establishes the session, then
+      // upgrades to WS when possible.
+      transports: ['polling', 'websocket'],
       withCredentials: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 4000,
+      timeout: 20000,
+    });
+
+    // Surface connection failures instead of failing silently: a dead socket is
+    // exactly why "notifications aren't coming" and messages appear only on refresh.
+    s.on('connect_error', (err) => {
+      console.warn('[socket] connect_error:', err?.message ?? err);
     });
 
     s.on('message:new', (p: { message: PublicMessage }) => applyNewMessage(p.message));
