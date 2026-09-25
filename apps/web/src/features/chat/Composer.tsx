@@ -6,6 +6,7 @@ import { useSocket } from '../../lib/socket';
 import { useUI } from '../../store/ui';
 import { useVoiceRecorder } from '../../lib/useVoiceRecorder';
 import { Avatar, Modal, cx } from '../../components/ui';
+import { Smile, BarChart3, Paperclip, Mic, X, Image as ImageIcon, Film } from 'lucide-react';
 import { EmojiPicker } from './EmojiPicker';
 import type { PublicAttachment, PublicChannel, PublicProfile } from '../../types';
 
@@ -262,10 +263,17 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
         <div className="mb-2 flex flex-wrap gap-2">
           {pending.map((a) => (
             <div key={a.id} className="flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-2 py-1 text-xs">
-              <span>{a.kind === 'IMAGE' ? '🖼️' : a.kind === 'VIDEO' ? '🎬' : '📎'}</span>
+              <span className="text-ink-soft">
+                {a.kind === 'IMAGE' ? <ImageIcon className="h-4 w-4" /> : a.kind === 'VIDEO' ? <Film className="h-4 w-4" /> : <Paperclip className="h-4 w-4" />}
+              </span>
               <span className="max-w-[140px] truncate">{a.mime}</span>
-              <button className="text-ink-soft hover:text-rose-400" onClick={() => setPending((p) => p.filter((x) => x.id !== a.id))}>
-                ✕
+              <button
+                type="button"
+                aria-label="Remove attachment"
+                className="flex h-6 w-6 items-center justify-center rounded text-ink-soft hover:text-rose-400"
+                onClick={() => setPending((p) => p.filter((x) => x.id !== a.id))}
+              >
+                <X className="h-3.5 w-3.5" />
               </button>
             </div>
           ))}
@@ -315,8 +323,14 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
           )}
         >
           <div className="relative">
-            <button className="pb-1.5 text-lg opacity-70 hover:opacity-100" title="Emoji" onClick={() => setShowEmoji((v) => !v)}>
-              😊
+            <button
+              type="button"
+              aria-label="Insert emoji"
+              title="Emoji"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-3 hover:text-ink"
+              onClick={() => setShowEmoji((v) => !v)}
+            >
+              <Smile className="h-5 w-5" />
             </button>
             {showEmoji ? (
               <div className="absolute bottom-10 left-0">
@@ -347,15 +361,33 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
             placeholder={`Message #${channel.name}`}
             className="max-h-44 flex-1 resize-none bg-transparent py-1.5 text-sm outline-none placeholder:text-ink-soft/60"
           />
-          <button className="pb-1.5 text-lg opacity-70 hover:opacity-100" title="Create poll" onClick={() => setPollOpen(true)}>
-            📊
+          <button
+            type="button"
+            aria-label="Create poll"
+            title="Create poll"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-3 hover:text-ink"
+            onClick={() => setPollOpen(true)}
+          >
+            <BarChart3 className="h-5 w-5" />
           </button>
-          <button className="pb-1.5 text-lg opacity-70 hover:opacity-100" title="Attach file" onClick={() => fileRef.current?.click()}>
-            📎
+          <button
+            type="button"
+            aria-label="Attach file"
+            title="Attach file"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-3 hover:text-ink"
+            onClick={() => fileRef.current?.click()}
+          >
+            <Paperclip className="h-5 w-5" />
           </button>
           {recorder.supported ? (
-            <button className="pb-1.5 text-lg opacity-70 hover:opacity-100" title="Record voice message" onClick={() => void startVoice()}>
-              🎙️
+            <button
+              type="button"
+              aria-label="Record voice message"
+              title="Record voice message"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-3 hover:text-ink"
+              onClick={() => void startVoice()}
+            >
+              <Mic className="h-5 w-5" />
             </button>
           ) : null}
           <button onClick={() => void send()} disabled={(!value.trim() && pending.length === 0) || sending} className="btn-primary h-9 px-4 py-0">
