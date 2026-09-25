@@ -42,6 +42,25 @@
     background: rgb(var(--line));
     border-radius: 9999px;
   }
+  /* Every clickable element shows a pointer; disabled shows not-allowed. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  a[href],
+  label[for],
+  summary {
+    cursor: pointer;
+  }
+  button:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+  /* Visible keyboard focus for all interactive elements (components can override
+     with their own focus-visible styles). Uses :where() so specificity stays 0. */
+  :where(a, button, [role='button'], input, textarea, select, [tabindex]:not([tabindex='-1'])):focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
 }
 
 @layer components {
@@ -76,4 +95,18 @@
 :root:not(.dark) .text-brand-300,
 :root:not(.dark) .text-brand-400 {
   color: #4f46e5;
+}
+
+
+/* Accessibility: honor users who prefer reduced motion — neutralize the pop-in/
+   slide-up/fade-in animations and long transitions instead of removing them. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
