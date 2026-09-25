@@ -54,6 +54,7 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
   const stopTimer = useRef<number | undefined>(undefined);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const lastMentionRef = useRef<string | null>(null);
   const recorder = useVoiceRecorder();
 
   // Members are only fetched once the user actually starts an @mention.
@@ -107,16 +108,25 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
     }
   }
 
+  /**
+   * Set the active @mention token. Only reset the highlighted index when the
+   * query TEXT actually changes — detectMention runs on every keyup, so resetting
+   * unconditionally would instantly undo ArrowUp/ArrowDown navigation (the reason
+   * "arrow keys can't pick a mention"). The ref mirrors the state so comparisons
+   * survive re-renders without a stale closure.
+   */
+  function setMention(next: string | null): void {
+    if (next === lastMentionRef.current) return;
+    lastMentionRef.current = next;
+    setMentionQuery(next);
+    if (next !== null) setMentionIdx(0);
+  }
+
   /** Recompute the active @mention token from the text just before the caret. */
   function detectMention(el: HTMLTextAreaElement): void {
     const caret = el.selectionStart ?? el.value.length;
     const m = MENTION_AT_CARET.exec(el.value.slice(0, caret));
-    if (m) {
-      setMentionQuery(m[1]);
-      setMentionIdx(0);
-    } else if (mentionQuery !== null) {
-      setMentionQuery(null);
-    }
+    setMention(m ? m[1] : null);
   }
 
   function onChange(e: React.ChangeEvent<HTMLTextAreaElement>): void {
@@ -155,7 +165,7 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
     const rest = value.slice(caret);
     const replaced = upto.replace(/@([A-Za-z0-9_]{0,24})$/, `@${username} `);
     setValue(replaced + rest);
-    setMentionQuery(null);
+    setMention(null);
     requestAnimationFrame(() => {
       autoresize();
       el?.focus();
@@ -184,7 +194,7 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
     if ((!body && pending.length === 0) || sending) return;
     setSending(true);
     stopTyping();
-    setMentionQuery(null);
+    setMention(null);
     try {
       const res = await channelsApi.send(channel.id, body, { attachmentIds: pending.map((a) => a.id) });
       applyNewMessage(res.message);
@@ -219,7 +229,7 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
       }
       if (e.key === 'Escape') {
         e.preventDefault();
-        setMentionQuery(null);
+        setMention(null);
         return;
       }
     }
@@ -371,7 +381,7 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
               <Smile className="h-5 w-5" />
             </button>
             {showEmoji ? (
-              <div className="absolute bottom-12 left-0">
+              <div className="absolute bottom-12 left-0 z-50">
                 <EmojiPicker
                   onSelect={(e) => {
                     insertAtCaret(e);
@@ -390,7 +400,7 @@ export function Composer({ channel }: { channel: PublicChannel }): JSX.Element {
             onKeyDown={onKeyDown}
             onKeyUp={(e) => detectMention(e.currentTarget)}
             onClick={(e) => detectMention(e.currentTarget)}
-            onBlur={() => setTimeout(() => setMentionQuery(null), 150)}
+            onBlur={() => setTimeout(() => setMention(null), 150)}
             onPaste={onPaste}
             placeholder={`Message #${channel.name}`}
             className="max-h-44 flex-1 resize-none self-center bg-transparent px-1 py-1.5 text-sm leading-relaxed outline-none placeholder:text-ink-soft/70"

@@ -12,6 +12,7 @@ build/
 .env
 .env.*
 !.env.example
+temp-cred*
 
 # Prisma
 apps/server/prisma/*.db

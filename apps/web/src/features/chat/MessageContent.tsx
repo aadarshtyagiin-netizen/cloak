@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Play, Pause, Loader2, FileText, File as FileIcon } from 'lucide-react';
 import { ApiError, linkPreviewApi, pollsApi } from '../../lib/api';
@@ -83,17 +83,32 @@ export function VoicePlayer({ voice }: { voice: PublicVoiceMessage }): JSX.Eleme
   const pushToast = useUI((s) => s.pushToast);
   const audioRef = useRef<HTMLAudioElement>(null);
   const barsRef = useRef<HTMLDivElement>(null);
-  const triedPlay = useRef(false);
+  const objectUrlRef = useRef<string | null>(null);
+  const triedFallback = useRef(false);
+  const [src, setSrc] = useState(voice.url);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [speedIdx, setSpeedIdx] = useState(0);
-  const [progress, setProgress] = useState(0); // 0..1
-  const [duration, setDuration] = useState(voice.durationMs / 1000);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [metaDuration, setMetaDuration] = useState(0);
+
+  // Clips recorded with MediaRecorder (webm/opus) usually report
+  // duration = Infinity, so trust the server's durationMs and only override it
+  // with a *finite* value the element reports. Progress is derived from this
+  // (not el.duration) — otherwise the bar/time stay stuck at 0 while it plays.
+  const total = metaDuration > 0 ? metaDuration : voice.durationMs / 1000;
+  const progress = total > 0 ? Math.min(1, currentTime / total) : 0;
 
   const peak = Math.max(1, ...voice.waveform);
   const bars = voice.waveform.length > 0 ? voice.waveform : new Array(40).fill(8);
   const shown = bars.slice(0, 56);
-  const elapsed = duration * progress;
+
+  useEffect(
+    () => () => {
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    },
+    [],
+  );
 
   async function toggle(): Promise<void> {
     const el = audioRef.current;
@@ -102,14 +117,33 @@ export function VoicePlayer({ voice }: { voice: PublicVoiceMessage }): JSX.Eleme
       el.pause();
       return;
     }
-    triedPlay.current = true;
+    setLoading(true);
     try {
-      setLoading(true);
-      // play() rejects on autoplay/codec errors — surface it instead of failing silently.
       await el.play();
-    } catch {
       setLoading(false);
-      pushToast('error', 'Could not play this voice message.');
+    } catch {
+      // Streaming playback can fail on some proxy/Range/codec combinations. Fall
+      // back to fetching the whole clip once and playing it from an object URL.
+      if (triedFallback.current) {
+        setLoading(false);
+        pushToast('error', 'Could not play this voice message.');
+        return;
+      }
+      triedFallback.current = true;
+      try {
+        const res = await fetch(voice.url);
+        if (!res.ok) throw new Error('fetch failed');
+        const url = URL.createObjectURL(await res.blob());
+        objectUrlRef.current = url;
+        setSrc(url); // keep React's prop in sync so it isn't reverted on re-render
+        el.src = url;
+        el.load();
+        await el.play();
+        setLoading(false);
+      } catch {
+        setLoading(false);
+        pushToast('error', 'Could not play this voice message.');
+      }
     }
   }
 
@@ -122,11 +156,15 @@ export function VoicePlayer({ voice }: { voice: PublicVoiceMessage }): JSX.Eleme
   function seek(clientX: number): void {
     const el = audioRef.current;
     const bar = barsRef.current;
-    if (!el || !bar || !Number.isFinite(el.duration) || el.duration === 0) return;
+    if (!el || !bar || total <= 0) return;
     const rect = bar.getBoundingClientRect();
     const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-    el.currentTime = ratio * el.duration;
-    setProgress(ratio);
+    try {
+      el.currentTime = ratio * total;
+    } catch {
+      /* some streamed clips can't seek — ignore */
+    }
+    setCurrentTime(ratio * total);
   }
 
   return (
@@ -168,8 +206,8 @@ export function VoicePlayer({ voice }: { voice: PublicVoiceMessage }): JSX.Eleme
           })}
         </div>
         <div className="flex items-center justify-between text-[11px] tabular-nums text-ink-soft">
-          <span>{fmtTime(elapsed)}</span>
-          <span>{fmtTime(duration)}</span>
+          <span>{fmtTime(total * progress)}</span>
+          <span>{fmtTime(total)}</span>
         </div>
       </div>
       <button
@@ -181,28 +219,24 @@ export function VoicePlayer({ voice }: { voice: PublicVoiceMessage }): JSX.Eleme
       </button>
       <audio
         ref={audioRef}
-        src={voice.url}
+        src={src}
         preload="none"
         onLoadedMetadata={(e) => {
           const d = e.currentTarget.duration;
-          if (Number.isFinite(d) && d > 0) setDuration(d);
+          if (Number.isFinite(d) && d > 0) setMetaDuration(d);
         }}
-        onPlay={() => setPlaying(true)}
+        onPlay={() => {
+          setPlaying(true);
+          setLoading(false);
+        }}
         onPause={() => setPlaying(false)}
         onWaiting={() => setLoading(true)}
         onPlaying={() => setLoading(false)}
         onEnded={() => {
           setPlaying(false);
-          setProgress(0);
+          setCurrentTime(0);
         }}
-        onError={() => {
-          setLoading(false);
-          if (triedPlay.current) pushToast('error', 'This voice message could not be loaded.');
-        }}
-        onTimeUpdate={(e) => {
-          const el = e.currentTarget;
-          if (el.duration) setProgress(el.currentTime / el.duration);
-        }}
+        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
         className="hidden"
       />
     </div>

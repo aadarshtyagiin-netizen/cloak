@@ -29,6 +29,7 @@ export function EmojiPicker({
   const ref = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const openedAt = useRef(performance.now());
   const [query, setQuery] = useState('');
   const [activeGroup, setActiveGroup] = useState<string>(EMOJI_GROUPS[0]?.name ?? '');
   const recent = useMemo(() => getRecentEmojis(), []);
@@ -36,8 +37,11 @@ export function EmojiPicker({
   useEffect(() => {
     // Use `click` (not `mousedown`) so the trigger button's own onClick — which
     // fires first — can toggle the picker closed without this handler racing it
-    // open again (the classic "picker won't close / flickers" bug).
+    // open again (the classic "picker won't close / flickers" bug). The 250ms
+    // guard ignores the very click that opened the picker, so it can never
+    // close itself on mount regardless of React's event/effect timing.
     function onClickOutside(e: MouseEvent): void {
+      if (performance.now() - openedAt.current < 250) return;
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     }
     function onKey(e: KeyboardEvent): void {

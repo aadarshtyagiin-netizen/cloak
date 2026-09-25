@@ -364,7 +364,7 @@ function MessageLine({
         <div className="relative">
           <HoverAction title="Add reaction" onClick={() => setPicker((v) => !v)} label={<SmilePlus className="h-[18px] w-[18px]" />} />
           {picker ? (
-            <div className="absolute bottom-9 right-0">
+            <div className="absolute bottom-9 right-0 z-50">
               <EmojiPicker onSelect={(e) => void toggleReaction(e)} onClose={() => setPicker(false)} />
             </div>
           ) : null}
