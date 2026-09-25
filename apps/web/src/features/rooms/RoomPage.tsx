@@ -14,6 +14,7 @@ import {
   useTrackVolume,
 } from '@livekit/components-react';
 import { ConnectionState, type LocalAudioTrack } from 'livekit-client';
+import type { KrispNoiseFilterProcessor } from '@livekit/krisp-noise-filter';
 import { ApiError, roomsApi } from '../../lib/api';
 import { useUI } from '../../store/ui';
 import { Avatar, EmptyState, Spinner, cx } from '../../components/ui';
@@ -215,6 +216,7 @@ function VoiceRoom({ deafened, setDeafened }: { deafened: boolean; setDeafened: 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
         <MicMeter />
         <div className="flex items-center gap-2">
+          <NoiseFilterToggle />
           <button
             onClick={() => void toggleDeafen()}
             title={deafened ? 'Undeafen — restore audio and your mic' : 'Deafen — mute everyone and your mic'}
@@ -231,6 +233,90 @@ function VoiceRoom({ deafened, setDeafened }: { deafened: boolean; setDeafened: 
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Voice-sensitivity control: toggles LiveKit's client-side Krisp noise filter on
+ * the local mic to strip background noise (keyboard, fan, chatter). Best-effort —
+ * hidden when unsupported, and any failure silently falls back to the browser's
+ * built-in noise suppression without breaking the microphone.
+ */
+function NoiseFilterToggle(): JSX.Element | null {
+  const { microphoneTrack } = useLocalParticipant();
+  // Cheap capability check so we can show the button without pulling the heavy
+  // Krisp model. The real (more precise) check + model load happen lazily on enable.
+  const [supported] = useState(() => {
+    try {
+      return typeof AudioWorkletNode !== 'undefined' && typeof WebAssembly !== 'undefined';
+    } catch {
+      return false;
+    }
+  });
+  const [on, setOn] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const processorRef = useRef<KrispNoiseFilterProcessor | null>(null);
+  const track = (microphoneTrack?.track ?? undefined) as LocalAudioTrack | undefined;
+
+  useEffect(() => {
+    let active = true;
+    async function apply(): Promise<void> {
+      if (!track) return;
+      try {
+        if (on) {
+          if (!processorRef.current) {
+            setLoading(true);
+            // Lazy-loaded so the ~MB Krisp model is only fetched when the user
+            // turns the filter on (keeps the room page light for everyone else).
+            const mod = await import('@livekit/krisp-noise-filter');
+            if (!active) return;
+            if (!mod.isKrispNoiseFilterSupported()) {
+              setOn(false);
+              return;
+            }
+            processorRef.current = mod.KrispNoiseFilter();
+            await track.setProcessor(processorRef.current);
+          }
+          if (active) await processorRef.current.setEnabled(true);
+        } else if (processorRef.current) {
+          await processorRef.current.setEnabled(false);
+        }
+      } catch {
+        /* fall back to the browser's built-in noise suppression */
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void apply();
+    return () => {
+      active = false;
+    };
+  }, [on, track]);
+
+  // Tear down the processor when leaving the room.
+  useEffect(() => {
+    return () => {
+      const p = processorRef.current;
+      processorRef.current = null;
+      if (p) void p.destroy().catch(() => undefined);
+    };
+  }, []);
+
+  if (!supported) return null;
+  return (
+    <button
+      onClick={() => setOn((v) => !v)}
+      disabled={loading}
+      title={on ? 'Background-noise filter is ON' : 'Reduce background noise'}
+      className={cx(
+        'flex h-9 items-center gap-1.5 rounded-full px-4 text-sm font-semibold transition disabled:opacity-60',
+        on
+          ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/40'
+          : 'bg-surface-3 text-ink hover:bg-line',
+      )}
+    >
+      {loading ? '🎙️ …' : on ? '🎙️ Noise filter on' : '🎙️ Reduce noise'}
+    </button>
   );
 }
 
